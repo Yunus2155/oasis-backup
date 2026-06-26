@@ -1,3 +1,20 @@
+# Pipelined integer multiplier (64x64 signed) for the z-score wide multiplies.
+# Used for diff^2 (per lane), sum^2, and count*sum_square. Deep pipeline -> stays
+# inside the DSP cascade and meets timing. LATENCY (PipeStages) MUST match
+# MULT_LAT in z_score_squared.sv.  (mult_gen max operand width is 64 bits.)
+create_ip -name mult_gen -vendor xilinx.com -library ip -version 12.0 -module_name int_mult_64
+set_property -dict [list \
+  CONFIG.PortAType {Signed} \
+  CONFIG.PortAWidth {64} \
+  CONFIG.PortBType {Signed} \
+  CONFIG.PortBWidth {64} \
+  CONFIG.Multiplier_Construction {Use_Mults} \
+  CONFIG.OptGoal {Speed} \
+  CONFIG.Use_Custom_Output_Width {false} \
+  CONFIG.PipeStages {18} \
+  CONFIG.ClockEnable {true} \
+] [get_ips int_mult_64]
+
 # Select the correct ILA IP for the target architecture.
 # NOTE: On Versal (e.g. V80) the IP is called axis_ila instead of ila,
 #       and the versioned -version flag of the UltraScale+ ila core does not apply.

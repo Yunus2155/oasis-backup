@@ -181,11 +181,25 @@ for (genvar I = 0; I < NUM_DECODERS; I++) begin
     // Discard typed
     `DATA_ASSIGN(typed_out, out);
 
+    // Decoded values as an AXI4S stream (16 int32 lanes per 512b beat).
+    AXI4S axi_decoded(.aclk(clk), .aresetn(rst_n));
+
     NDataToAXI #(data8_t, DATABEAT_SIZE) inst_ndata_to_axi (
         .clk(clk),
         .rst_n(rst_n),
 
         .in(out),
+        .out(axi_decoded)
+    );
+
+    // -- Post-decoder compute stage: z-score (squared, division-free) -----------------------------
+    // Classifies each decoded value as outlier (1) / inlier (0). 2-pass: the column must be decoded
+    // twice (pass 1 accumulates stats, pass 2 classifies). Dedicated z-score build: always inline.
+    my_z_score_squared inst_z_score (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .in(axi_decoded),
         .out(axi_out[I])
     );
 end
