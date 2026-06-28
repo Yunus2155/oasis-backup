@@ -18,6 +18,9 @@ module my_z_score_squared
     localparam int WIDE      = 160;                  // wide enough for diff^2 and threshold
     localparam int DIFF_W    = 64;                   // diff = n*x - S; 64b (mult IP max). Assumes |n*x - S| < 2^63.
     localparam int MULT_LAT  = 18;                   // !! MUST match int_mult_64 PipeStages in init_ip.tcl (optimum for 64x64)
+    // Pass-2 datapath latency, input beat -> squared output: n*x IP (MULT_LAT) + subtract reg (1)
+    // + squaring IP (MULT_LAT). The metadata pipeline is this deep so valid/keep/last stay aligned.
+    localparam int PASS2_LAT = 2*MULT_LAT + 1;
 
     // ---- accumulator + state ----
     typedef enum logic [2:0] {accumulate, compute_wait, compute_sub, compute_scale, output_z_score} state_t;
@@ -51,13 +54,16 @@ module my_z_score_squared
     logic                c_valid, c_last;
     logic                draining;                  // pass-1 done; flushing the accumulate pipe
 
+    // ---- pass-2 stage 0: input buffer (registers in.tdata so the decoder->z-score crossing is
+    //      register-to-register with no logic in it) ----
+    logic signed [ELEM_BITS-1:0] x_reg [N_IN];
     // ---- pass-2 stage 1: diff = n*x - S, per lane (drives the squaring IPs) ----
     logic signed [DIFF_W-1:0] s1_diff [N_IN];
 
-    // ---- metadata pipeline: valid/keep/last delayed MULT_LAT cycles to align with IP output ----
-    logic                 meta_valid [MULT_LAT+1];
-    logic [IN_BITS/8-1:0] meta_keep  [MULT_LAT+1];
-    logic                 meta_last  [MULT_LAT+1];
+    // ---- metadata pipeline: valid/keep/last delayed PASS2_LAT cycles to align with IP output ----
+    logic                 meta_valid [PASS2_LAT+1];
+    logic [IN_BITS/8-1:0] meta_keep  [PASS2_LAT+1];
+    logic                 meta_last  [PASS2_LAT+1];
 
     // The pipeline advances when the output slot is free or draining.
     logic pipe_adv;
@@ -72,6 +78,22 @@ module my_z_score_squared
     wire  [63:0]  nq_b = sum_square_reg;             // sum_sq  (>= 0)
     int_mult_64 mult_ss (.CLK(clk), .CE(1'b1), .A(ss_a), .B(ss_a), .P(ip_ss_p));
     int_mult_64 mult_nq (.CLK(clk), .CE(1'b1), .A(nq_a), .B(nq_b), .P(ip_nq_p));
+
+    // Pass-2 stage 1 input: n*x per lane via DSP IP, fed from the x_reg input buffer (in phase with
+    // meta[0]). The n*x multiply is pipelined instead of combinational. n = count_reg, constant
+    // throughout pass 2. CE = pipe_adv so it freezes with the rest of the pipe.
+    logic [127:0] ip_nx_p [N_IN];
+    wire  [63:0]  nx_a = {32'b0, count_reg};         // n (>= 0) as signed 64b
+    generate
+        for (genvar gi = 0; gi < N_IN; gi++) begin : gen_nx
+            wire [63:0] nx_b = {{(64-ELEM_BITS){x_reg[gi][ELEM_BITS-1]}}, x_reg[gi]};   // x sign-extended to 64b
+            int_mult_64 mult_nx (
+                .CLK(clk), .CE(pipe_adv),
+                .A(nx_a), .B(nx_b),
+                .P(ip_nx_p[gi])
+            );
+        end
+    endgenerate
 
     // Pass-2 squares: dsq = diff*diff per lane. CE = pipe_adv so the whole pipe freezes together.
     logic [127:0] ip_dsq_p [N_IN];
@@ -103,7 +125,7 @@ module my_z_score_squared
             a_valid <= 1'b0; b_valid <= 1'b0; c_valid <= 1'b0;
             a_last  <= 1'b0; b_last  <= 1'b0; c_last  <= 1'b0;
             draining        <= 1'b0;
-            for (k = 0; k <= MULT_LAT; k++) meta_valid[k] <= 1'b0;
+            for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
             out.tvalid      <= 1'b0;
             out.tdata       <= '0;
             out.tkeep       <= '0;
@@ -179,7 +201,7 @@ module my_z_score_squared
                 end
                 compute_scale: begin
                     threshold_reg <= K*K*nq_minus_s2_reg;                     // * 9
-                    for (k = 0; k <= MULT_LAT; k++) meta_valid[k] <= 1'b0;    // clear pass-2 pipe
+                    for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;   // clear pass-2 pipe
                     state         <= output_z_score;
                 end
 
@@ -189,30 +211,35 @@ module my_z_score_squared
                         // output stage: compare the squared diffs (IP output) to the threshold
                         automatic logic [IN_BITS-1:0] flags = '0;
                         for (int i = 0; i < N_IN; i++) begin
-                            if ((&meta_keep[MULT_LAT][i*KEEP_PER +: KEEP_PER]) &&
+                            if ((&meta_keep[PASS2_LAT][i*KEEP_PER +: KEEP_PER]) &&
                                 ($signed(ip_dsq_p[i]) > threshold_reg))
                                 flags[i*ELEM_BITS +: ELEM_BITS] = 32'd1;
                         end
-                        out.tvalid <= meta_valid[MULT_LAT];
+                        out.tvalid <= meta_valid[PASS2_LAT];
                         out.tdata  <= flags;
-                        out.tkeep  <= meta_keep [MULT_LAT];
-                        out.tlast  <= meta_last [MULT_LAT];
+                        out.tkeep  <= meta_keep [PASS2_LAT];
+                        out.tlast  <= meta_last [PASS2_LAT];
 
-                        // shift the metadata pipeline (aligns with the IP latency)
-                        for (k = MULT_LAT; k >= 1; k--) begin
+                        // shift the metadata pipeline (aligns with the total pass-2 latency)
+                        for (k = PASS2_LAT; k >= 1; k--) begin
                             meta_valid[k] <= meta_valid[k-1];
                             meta_keep [k] <= meta_keep [k-1];
                             meta_last [k] <= meta_last [k-1];
                         end
 
-                        // input -> stage 1: latch metadata and compute diff for every lane
+                        // stage 0: buffer the input and latch metadata, all in phase
                         meta_valid[0] <= in.tvalid;     // in.tready == pipe_adv here
                         meta_keep [0] <= in.tkeep;
                         meta_last [0] <= in.tlast;
                         for (int i = 0; i < N_IN; i++) begin
-                            automatic logic signed [32:0]          n = $signed({1'b0, count_reg});
-                            automatic logic signed [ELEM_BITS-1:0] x = signed'(in.tdata[i*ELEM_BITS +: ELEM_BITS]);
-                            s1_diff[i] <= n*x - sum_reg;
+                            x_reg[i] <= signed'(in.tdata[i*ELEM_BITS +: ELEM_BITS]);
+                        end
+
+                        // stage 1 (subtract): the n*x IPs (gen_nx) have produced n*x for the beat now
+                        // at this stage; subtract S. |n*x - S| < 2^63 is assumed (see DIFF_W), so the
+                        // low DIFF_W bits of the signed product carry the value.
+                        for (int i = 0; i < N_IN; i++) begin
+                            s1_diff[i] <= $signed(ip_nx_p[i][DIFF_W-1:0]) - sum_reg;
                         end
                     end
 
@@ -225,7 +252,7 @@ module my_z_score_squared
                         threshold_reg  <= '0;
                         a_valid <= 1'b0; b_valid <= 1'b0; c_valid <= 1'b0;
                         draining       <= 1'b0;
-                        for (k = 0; k <= MULT_LAT; k++) meta_valid[k] <= 1'b0;
+                        for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
                         state          <= accumulate;
                     end
                 end

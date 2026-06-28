@@ -46,7 +46,7 @@ find_package(oasis REQUIRED)
 # ---------------------------------------------------------------------------
 # Extension
 # ---------------------------------------------------------------------------
-set(EXTENSION_SOURCES src/oasis_extension.cpp src/oasis_scan.cpp src/oasis_profile.cpp
+set(EXTENSION_SOURCES src/oasis_extension.cpp src/oasis_scan.cpp src/zscore_scan.cpp src/oasis_profile.cpp
                       src/rdma_file_system.cpp src/filter_pushdown.cpp src/parcore_metadata_util.cpp
                       src/oasis_settings.cpp src/coalesced_fetcher.cpp)
 
