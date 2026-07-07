@@ -3,6 +3,7 @@
 #include "libstf/common.hpp"
 #include <coyote/cThread.hpp>
 #include <libstf/configuration.hpp>
+#include <parcore/configuration.hpp> // parcore::DecoderProfile (reused for the z-score stage)
 
 namespace oasis {
 
@@ -11,6 +12,13 @@ constexpr const uint64_t OASIS_SYSTEM_ID = 0x0A515;
 // Per-stream write registers: [0] vaddr, [1] size, [2] pid.
 constexpr const uint64_t READ_REQ_CONFIG_REGS = 3;
 constexpr const uint64_t READ_REQ_CONFIG_ID   = 0x2f966a70f04c0e93;
+
+// Read-side register layout of the ZScoreProfileConfig: 2 info registers ([0]=ID, [1]=num_zscores)
+// followed by 8 profiling counters per z-score lane (4 input + 4 output). Mirrors the HW layout in
+// hardware/src/hdl/common.sv.
+constexpr const uint64_t ZSCORE_PROFILE_CONFIG_ID   = 0x7a5c012e9b3d4f60;
+constexpr const uint32_t ZSCORE_PROFILE_INFO_REGS    = 2;
+constexpr const uint32_t ZSCORE_PROFILE_PROFILE_REGS = 8;
 
 /**
  * Configues a hardware read request module to fetch data.
@@ -49,6 +57,30 @@ class ReadReqConfig : public libstf::Config {
   private:
     libstf::stream_t num_streams_;
     uintptr_t        base_vaddr_ = 0;
+};
+
+/**
+ * Read-only access to the per-lane z-score StreamProfiler counters (one z-score lane per decoder).
+ * Mirrors parcore::ColumnChunkDecoderConfig::read_profile, against the ZScoreProfileConfig slot.
+ */
+class ZScoreProfileConfig : public libstf::Config {
+  public:
+    ZScoreProfileConfig(std::shared_ptr<coyote::cThread> cthread, uint32_t addr_offset,
+                        uint32_t num_regs);
+
+    /**
+     * Reads the input and output StreamProfiler counters for the given z-score lane.
+     *
+     * @param zscore The z-score lane whose profiling counters to read.
+     */
+    parcore::DecoderProfile read_profile(libstf::stream_t zscore);
+
+    const libstf::stream_t num_zscores() const;
+
+    static constexpr uint64_t ID = ZSCORE_PROFILE_CONFIG_ID;
+
+  private:
+    libstf::stream_t num_zscores_;
 };
 
 } // namespace oasis

@@ -4,9 +4,10 @@ import oasis::*;
 
 `include "axi_macros.svh"
 
-// Standalone test of celeris my_z_score_squared in the oasis sim environment.
-// Local mode (ENABLE_RDMA=OFF): N_STRM_AXI == 1, input arrives on axis_host_recv[0].
-// The host feeds the SAME column twice (2-pass): pass 1 accumulates stats, pass 2 classifies.
+// Standalone test of the celeris covariance operator in the oasis sim environment.
+// Single-pass, host-side finalize: one beat = one row of 16 features, the operator
+// streams out the raw sums (sum_product / sum_self / num_rows) for the host to divide.
+// Build sim with -DN_DECODERS=2 (even streams); this test uses stream 0, ties off the rest.
 
 // -- Tie-off unused interfaces and signals --------------------------------------------------------
 always_comb sq_rd.tie_off_m();
@@ -14,6 +15,12 @@ always_comb cq_rd.tie_off_s();
 
 for (genvar I = 1; I < N_STRM_AXI; I++) begin
     always_comb axis_host_recv[I].tie_off_s();
+end
+
+// Card/HBM interfaces are unused here -> tie them off (else tvalid is X -> $fatal).
+for (genvar I = 0; I < N_CARD_AXI; I++) begin
+    always_comb axis_card_recv[I].tie_off_s();
+    always_comb axis_card_send[I].tie_off_m();
 end
 
 // -- Fix clock and reset names --------------------------------------------------------------------
@@ -24,11 +31,11 @@ assign clk   = aclk;
 assign rst_n = aresetn;
 
 // -- Signals --------------------------------------------------------------------------------------
-AXI4S zscore_in(.aclk(clk), .aresetn(rst_n));
-AXI4S zscore_out[N_STRM_AXI](.aclk(clk), .aresetn(rst_n));
+AXI4S cov_in(.aclk(clk), .aresetn(rst_n));
+AXI4S cov_out[N_STRM_AXI](.aclk(clk), .aresetn(rst_n));
 
 for (genvar I = 1; I < N_STRM_AXI; I++) begin
-    always_comb zscore_out[I].tie_off_m();
+    always_comb cov_out[I].tie_off_m();
 end
 
 // -- Configuration --------------------------------------------------------------------------------
@@ -65,20 +72,15 @@ MemConfig #(
     .out(mem_config)
 );
 
-// -- Z-score (squared, division-free) -------------------------------------------------------------
-`AXIS_ASSIGN(axis_host_recv[0], zscore_in) // AXI4SR to AXI4S
+// -- Covariance (single-pass accumulate, host-side finalize) --------------------------------------
+`AXIS_ASSIGN(axis_host_recv[0], cov_in) // AXI4SR to AXI4S
 
-decoder_profile_i zscore_profile();
-assign zscore_profile.stop = 1'b0;
-
-my_z_score_squared inst_z_score (
+covariance inst_covariance (
     .clk(clk),
     .rst_n(rst_n),
 
-    .in(zscore_in),
-    .out(zscore_out[0]),
-
-    .profile(zscore_profile)
+    .in(cov_in),
+    .out(cov_out[0])
 );
 
 // -- Output writer --------------------------------------------------------------------------------
@@ -92,6 +94,6 @@ OutputWriter inst_output_writer (
 
     .mem_config(mem_config),
 
-    .data_in(zscore_out),
+    .data_in(cov_out),
     .data_out(axis_host_send)
 );

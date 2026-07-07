@@ -48,7 +48,14 @@ for (genvar I = 0; I < NUM_STREAMS; I++) begin
     ready_valid_i #(size_t) len(clk, reset_synced);
     ConfigWriteFIFO #(I * NUM_WRITE_REGS + 1, MAX_NUM_ENQUEUED_BUFFERS, size_t) inst_len (clk, reset_synced, write_config, len);
 
-    `READY_COMBINE(vaddr, len, out[I])
+    // NOTE: expanded inline instead of `READY_COMBINE` -- the macro's `inst_ready_combine_`__LINE__`
+    // instance name does not token-paste under Vivado synth (the line number leaks as a bare token,
+    // "syntax error near <line>"). The genvar scope already makes this name unique per iteration.
+    ReadyValidCombiner inst_ready_combine (
+        .left(vaddr),
+        .right(len),
+        .out(out[I])
+    );
 end
 
 endmodule

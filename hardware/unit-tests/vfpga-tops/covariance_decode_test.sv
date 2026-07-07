@@ -5,11 +5,13 @@
 import parcore::*;
 import libstf::data8_t;
 
-// Integration test: ColumnChunkDecoder -> my_z_score_squared.
-// Mirrors the parcore column_chunk_decoder_test top, but routes the decoded
-// values through the z-score operator before sending them to the host. The same
-// column chunk is fed twice (two decodes) so the z-score gets its two passes:
-// pass 1 accumulates stats, pass 2 classifies -> one flag per value.
+// Integration test: ColumnChunkDecoder -> covariance.
+// Mirrors the parcore column_chunk_decoder_test top, but routes the decoded values
+// through the covariance operator before sending them to the host. The decoder
+// decodes ONE int32 column chunk; covariance consumes it as 16 int32/beat and
+// treats each beat as one row of 16 features (single-column reshape -- this test
+// validates the decode->covariance seam, not multi-column statistics). SINGLE pass:
+// one decode -> one accumulate -> raw sums streamed out.
 
 /* -- Tie-off unused interfaces and signals ----------------------------- */
 always_comb notify.tie_off_m();
@@ -21,6 +23,12 @@ always_comb cq_wr.tie_off_s();
 for (genvar I = 1; I < N_STRM_AXI; I++) begin
     always_comb axis_host_recv[I].tie_off_s();
     always_comb axis_host_send[I].tie_off_m();
+end
+
+// Card/HBM interfaces are unused here -> tie them off (else tvalid is X -> $fatal).
+for (genvar I = 0; I < N_CARD_AXI; I++) begin
+    always_comb axis_card_recv[I].tie_off_s();
+    always_comb axis_card_send[I].tie_off_m();
 end
 
 /* -- Fix clock and reset names ----------------------------------------- */
@@ -110,22 +118,17 @@ NDataToAXI #(data8_t, 64) inst_ndata_to_axi (
     .out(axi_decoded)
 );
 
-/* -- Z-SCORE ----------------------------------------------------------- */
+/* -- COVARIANCE -------------------------------------------------------- */
 
-decoder_profile_i zscore_profile();
-assign zscore_profile.stop = 1'b0;
-
-AXI4S axi_zscore (.aclk(clk), .aresetn(rst_n));
-my_z_score_squared inst_z_score (
+AXI4S axi_cov (.aclk(clk), .aresetn(rst_n));
+covariance inst_covariance (
     .clk(clk),
     .rst_n(rst_n),
 
     .in(axi_decoded),
-    .out(axi_zscore),
-
-    .profile(zscore_profile)
+    .out(axi_cov)
 );
 
 /* -- OUTPUT ------------------------------------------------------------ */
 
-`AXIS_ASSIGN(axi_zscore, axis_host_send[0])
+`AXIS_ASSIGN(axi_cov, axis_host_send[0])
