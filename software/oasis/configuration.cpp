@@ -22,4 +22,31 @@ void ReadReqConfig::enqueue_read(libstf::stream_t stream, size_t vaddr, size_t s
 
 const libstf::stream_t ReadReqConfig::num_streams() const { return num_streams_; }
 
+ZScoreProfileConfig::ZScoreProfileConfig(std::shared_ptr<coyote::cThread> cthread,
+                                         uint32_t addr_offset, uint32_t num_regs)
+    : Config(cthread, addr_offset, num_regs), num_zscores_(read_register(1).value()) {}
+
+parcore::DecoderProfile ZScoreProfileConfig::read_profile(libstf::stream_t zscore) {
+    if (zscore >= num_zscores_) {
+        throw std::runtime_error("Attempted to read profile of z-score lane " +
+                                 std::to_string(zscore) + ", out of " +
+                                 std::to_string(num_zscores_) + " lanes");
+    }
+
+    auto base = ZSCORE_PROFILE_INFO_REGS + zscore * ZSCORE_PROFILE_PROFILE_REGS;
+
+    parcore::DecoderProfile profile;
+    profile.in.handshakes_cycles  = read_register(base + 0).value();
+    profile.in.starved_cycles     = read_register(base + 1).value();
+    profile.in.stalled_cycles     = read_register(base + 2).value();
+    profile.in.idle_cycles        = read_register(base + 3).value();
+    profile.out.handshakes_cycles = read_register(base + 4).value();
+    profile.out.starved_cycles    = read_register(base + 5).value();
+    profile.out.stalled_cycles    = read_register(base + 6).value();
+    profile.out.idle_cycles       = read_register(base + 7).value();
+    return profile;
+}
+
+const libstf::stream_t ZScoreProfileConfig::num_zscores() const { return num_zscores_; }
+
 } // namespace oasis

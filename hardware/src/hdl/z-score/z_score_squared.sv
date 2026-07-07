@@ -7,7 +7,8 @@ module my_z_score_squared
  (input  logic clk,
   input  logic rst_n,
     AXI4S.s in,
-    AXI4S.m out);
+    AXI4S.m out,
+    decoder_profile_i.m profile);   // in = pass1+pass2 input stream, out = pass2 flag output stream
 
 `RESET_RESYNC // Reset pipelining (provides reset_synced)
 
@@ -259,5 +260,39 @@ module my_z_score_squared
             endcase
         end
     end
+
+    // ------ Stream profiling ------------------------
+    // Same pattern as ColumnChunkDecoder: tap the input (decoded values, both passes) and the output
+    // (pass-2 flags). out_starved high => z-score is the producer limiter; out_stalled high =>
+    // OutputWriter backpressures us; in_starved high => decoder isn't feeding us fast enough.
+    stream_profile_i profile_in ();
+    stream_profile_i profile_out();
+
+    assign profile.counters.in  = profile_in.counters;
+    assign profile.counters.out = profile_out.counters;
+    assign profile_in.stop      = profile.stop;
+    assign profile_out.stop     = profile.stop;
+
+    StreamProfiler inst_profile_in (
+        .clk(clk),
+        .rst_n(reset_synced),
+
+        .last (in.tlast),
+        .valid(in.tvalid),
+        .ready(in.tready),
+
+        .profile(profile_in)
+    );
+
+    StreamProfiler inst_profile_out (
+        .clk(clk),
+        .rst_n(reset_synced),
+
+        .last (out.tlast),
+        .valid(out.tvalid),
+        .ready(out.tready),
+
+        .profile(profile_out)
+    );
 
 endmodule

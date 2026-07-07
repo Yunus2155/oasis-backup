@@ -15,6 +15,22 @@ set_property -dict [list \
   CONFIG.ClockEnable {true} \
 ] [get_ips int_mult_64]
 
+# Pipelined integer multiplier (32x32 signed) for the covariance cross-products.
+# 136 instances form the M(M+1)/2 upper-triangular product array; 32x32 keeps the
+# DSP count sane. PipeStages MUST match `lat` in covariance.sv.
+create_ip -name mult_gen -vendor xilinx.com -library ip -version 12.0 -module_name int_mult_32
+set_property -dict [list \
+  CONFIG.PortAType {Signed} \
+  CONFIG.PortAWidth {32} \
+  CONFIG.PortBType {Signed} \
+  CONFIG.PortBWidth {32} \
+  CONFIG.Multiplier_Construction {Use_Mults} \
+  CONFIG.OptGoal {Speed} \
+  CONFIG.Use_Custom_Output_Width {false} \
+  CONFIG.PipeStages {6} \
+  CONFIG.ClockEnable {true} \
+] [get_ips int_mult_32]
+
 # Select the correct ILA IP for the target architecture.
 # NOTE: On Versal (e.g. V80) the IP is called axis_ila instead of ila,
 #       and the versioned -version flag of the UltraScale+ ila core does not apply.

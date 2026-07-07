@@ -2,6 +2,7 @@
 
 #include "oasis_context_cache_entry.hpp"
 #include "oasis/oasis_context.hpp"
+#include "oasis/configuration.hpp"
 #include "parcore/configuration.hpp"
 
 #include "duckdb/function/table_function.hpp"
@@ -124,6 +125,24 @@ unique_ptr<GlobalTableFunctionState> OasisProfileInitGlobal(ClientContext &conte
 	return std::move(gstate);
 }
 
+// Same as above but reads the z-score stage's StreamProfiler counters (one lane per decoder). Reuses
+// the shared bind/scan/row helpers; only the hardware config it reads from differs.
+unique_ptr<GlobalTableFunctionState> OasisZScoreProfileInitGlobal(ClientContext &context,
+                                                                  TableFunctionInitInput &input) {
+	auto gstate = make_uniq<OasisProfileGlobalState>();
+
+	auto &ctx = GetOrCreateOasisContext(context);
+	auto config = ctx.config<oasis::ZScoreProfileConfig>();
+
+	auto num_zscores = config->num_zscores();
+	gstate->rows.reserve(num_zscores);
+	for (libstf::stream_t zscore = 0; zscore < num_zscores; zscore++) {
+		gstate->rows.push_back(MakeRow(zscore, config->read_profile(zscore)));
+	}
+
+	return std::move(gstate);
+}
+
 void OasisProfileFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	auto &gstate = data_p.global_state->Cast<OasisProfileGlobalState>();
 
@@ -167,6 +186,11 @@ void RegisterOasisProfileFunction(ExtensionLoader &loader) {
 	TableFunction profile_function("oasis_stream_profile", {}, OasisProfileFunction, OasisProfileBind,
 	                               OasisProfileInitGlobal);
 	loader.RegisterFunction(profile_function);
+
+	// Same columns/scan, but reads the z-score stage's profiler counters.
+	TableFunction zscore_profile_function("oasis_zscore_profile", {}, OasisProfileFunction,
+	                                       OasisProfileBind, OasisZScoreProfileInitGlobal);
+	loader.RegisterFunction(zscore_profile_function);
 }
 
 } // namespace duckdb
