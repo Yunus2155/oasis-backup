@@ -11,7 +11,9 @@
 #include "parquet_reader.hpp"
 
 #include <algorithm>
+#include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace duckdb {
@@ -39,10 +41,23 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 	}
 };
 
+// One row group submitted to the FPGA and awaiting its flags. The scheduler owns the 2-pass flow (and
+// so keeps the input buffer mapped through BOTH passes) until it completes; we hold the handle to
+// collect the flag buffer and num_values to know how many flags it carries.
+struct InFlightZGroup {
+	oasis::SplinterResultHandle handle;
+	size_t num_values = 0;
+};
+
 // Per-worker state: this worker's file handle plus the flag buffer of the row group it is currently
 // slicing into STANDARD_VECTOR_SIZE-sized vectors.
 struct ZScoreLocalState : public LocalTableFunctionState {
 	unique_ptr<FileHandle> file_handle;
+
+	// Sliding window of row groups submitted ahead of consumption, so the decoder stays fed while the
+	// host is still emitting the current group's flags. Collected FIFO -> flags come back in row-group
+	// order, exactly like the old one-at-a-time path.
+	std::deque<InFlightZGroup> in_flight;
 
 	std::shared_ptr<libstf::Buffer> current_flags;
 	size_t current_offset = 0;    // values already emitted from current_flags
@@ -108,14 +123,15 @@ unique_ptr<LocalTableFunctionState> ZScoreInitLocal(ExecutionContext &context, T
 	return std::move(lstate);
 }
 
-// Reads one row group's column-chunk bytes, builds the 2-pass z-score flow, submits it, and blocks
-// for the flag buffer. Returns false once the row groups are exhausted.
-bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
-                   const ZScoreBindData &bind) {
+// Submits one row group's 2-pass z-score flow to the scheduler WITHOUT blocking, returning the handle
+// to collect its flags later. Claims the next group atomically, skips empty ones, and returns nullopt
+// once the row groups are exhausted (nothing submitted).
+std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate,
+                                          ZScoreLocalState &lstate, const ZScoreBindData &bind) {
 	while (true) {
 		size_t group = gstate.next_group.fetch_add(1);
 		if (group >= gstate.total_groups) {
-			return false;
+			return std::nullopt;
 		}
 		const auto &cc = bind.metadata.groups[group].chunks[bind.column_id];
 		if (cc.num_values == 0) {
@@ -157,18 +173,45 @@ bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLo
 		oasis::QuerySplinter splinter;
 		splinter.streams.push_back(std::move(flow));
 
-		auto result = ctx.scheduler().submit(std::move(splinter));
-		auto batch = result.get_next_batch(); // Blocking: first hardware bring-up keeps it synchronous.
-		if (!batch) {
-			throw InternalException("z-score flow for row group %llu closed with no output",
-			                        (unsigned long long)group);
-		}
-
-		lstate.current_flags = std::move(batch->buffer);
-		lstate.current_offset = 0;
-		lstate.current_remaining = cc.num_values;
-		return true;
+		return InFlightZGroup{ctx.scheduler().submit(std::move(splinter)), cc.num_values};
 	}
+}
+
+// Tops the in-flight window back up to WINDOW submitted groups (or until the groups run out). Keeping
+// several 2-pass flows queued is what stops the decoder idling between groups.
+void FillWindow(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
+                const ZScoreBindData &bind) {
+	constexpr size_t WINDOW = 8;
+	while (lstate.in_flight.size() < WINDOW) {
+		auto g = SubmitGroup(ctx, gstate, lstate, bind);
+		if (!g) {
+			break; // row groups exhausted
+		}
+		lstate.in_flight.push_back(std::move(*g));
+	}
+}
+
+// Makes the next row group's flags current: tops up the pipeline, then collects the oldest in-flight
+// group (FIFO -> row-group order preserved). Returns false once all groups are consumed.
+bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
+                   const ZScoreBindData &bind) {
+	FillWindow(ctx, gstate, lstate, bind); // prime on the first call, top up thereafter
+	if (lstate.in_flight.empty()) {
+		return false; // all row groups done
+	}
+
+	auto group = std::move(lstate.in_flight.front());
+	lstate.in_flight.pop_front();
+
+	auto batch = group.handle.get_next_batch(); // usually already complete: it was submitted groups ago
+	if (!batch) {
+		throw InternalException("z-score flow closed with no output");
+	}
+
+	lstate.current_flags = std::move(batch->buffer);
+	lstate.current_offset = 0;
+	lstate.current_remaining = group.num_values;
+	return true;
 }
 
 void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &output) {
