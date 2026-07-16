@@ -10,6 +10,8 @@
 #include "parcore_metadata_util.hpp"
 #include "parquet_reader.hpp"
 
+#include <libstf/profiling.hpp>
+
 #include <algorithm>
 #include <deque>
 #include <memory>
@@ -19,6 +21,12 @@
 namespace duckdb {
 
 namespace {
+
+using libstf::Profiler;
+
+// Region prefix for the caliper report (mirrors parcore's convention). These three regions cover the
+// host feed steps the scheduler's own regions miss: the disk read, the buffer alloc, and the wait.
+const std::string prefix = "duckdb::zscore_scan::";
 
 // Bind-time state: which file, the ParCore metadata (row groups + chunk layout), and the resolved
 // column index the z-score runs on.
@@ -150,11 +158,15 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 		// Read the compressed column-chunk bytes into one FPGA-mappable input buffer. Both z-score
 		// passes read from this same buffer (the host re-feeds the column; no second allocation).
 		void *ptr;
+		Profiler::open_regions({prefix + "allocate"});
 		auto status = ctx.memory_pool()->allocate(cc.total_compressed_size, &ptr);
+		Profiler::close_regions({prefix + "allocate"});
 		if (!status.ok()) {
 			throw IOException("Could not allocate z-score input buffer: " + status.message());
 		}
+		Profiler::open_regions({prefix + "read"});
 		lstate.file_handle->Read(ptr, cc.total_compressed_size, cc.offset);
+		Profiler::close_regions({prefix + "read"});
 		auto input_buf =
 		    libstf::make_buffer(ctx.memory_pool(), ptr, cc.total_compressed_size, cc.total_compressed_size);
 
@@ -203,7 +215,9 @@ bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLo
 	auto group = std::move(lstate.in_flight.front());
 	lstate.in_flight.pop_front();
 
+	Profiler::open_regions({prefix + "collect"});
 	auto batch = group.handle.get_next_batch(); // usually already complete: it was submitted groups ago
+	Profiler::close_regions({prefix + "collect"});
 	if (!batch) {
 		throw InternalException("z-score flow closed with no output");
 	}
