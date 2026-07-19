@@ -64,10 +64,9 @@ OasisContext::OasisContext(std::shared_ptr<libstf::MemoryPool> memory_pool)
     bypass_stream_ = cc_config->num_decoders();
 
     // TODO: Give each stream a distinct ctid so concurrent reads run on separate RDMA queue pairs.
-    auto read_req_config = config<ReadReqConfig>();
-    for (libstf::stream_t stream = 0; stream < read_req_config->num_streams(); ++stream) {
-        read_req_config->set_pid(stream, 0);
-    }
+    // This needs a per-stream pid register in hardware first (see ReadReqConfig in configuration.hpp).
+    // The loop that used to write one here was a bug: with the stride off by one it pushed vaddr = 0
+    // into stream 1's read FIFO, so lane 1 issued a read at vaddr 0 and faulted the driver.
 
     // Pre-map huge pages to FPGA TLB
     auto *huge_pool = dynamic_cast<libstf::HugePageMemoryPool *>(memory_pool_.get());

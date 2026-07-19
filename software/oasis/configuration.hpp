@@ -9,8 +9,10 @@ namespace oasis {
 
 constexpr const uint64_t OASIS_SYSTEM_ID = 0x0A515;
 
-// Per-stream write registers: [0] vaddr, [1] size, [2] pid.
-constexpr const uint64_t READ_REQ_CONFIG_REGS = 3;
+// Per-stream write registers: [0] vaddr, [1] size. MUST match NUM_READ_REQ_CONFIG_REGS in
+// hardware/src/hdl/common.sv -- the hardware lays the per-stream FIFOs out at this stride, so a
+// mismatch makes stream N's writes land in stream N+1's registers.
+constexpr const uint64_t READ_REQ_CONFIG_REGS = 2;
 constexpr const uint64_t READ_REQ_CONFIG_ID   = 0x2f966a70f04c0e93;
 
 // Read-side register layout of the ZScoreProfileConfig: 2 info registers ([0]=ID, [1]=num_zscores)
@@ -34,12 +36,10 @@ class ReadReqConfig : public libstf::Config {
      */
     void set_base_vaddr(uintptr_t base_vaddr);
 
-    /**
-     * Set the Coyote thread id (used for parallel RDMA queue pairs) the hardware issues `stream`'s
-     * reads for. Give each stream a distinct cThread's ctid so concurrent per-stream reads run on
-     * separate queue pairs. Must be set before the first enqueue_read() on that stream.
-     */
-    void set_pid(libstf::stream_t stream, uint32_t pid);
+    // NOTE: there is deliberately no set_pid(). The hardware has no pid register -- ReadReqConfig
+    // instantiates only the vaddr and len FIFOs per stream, and ReadReqGenerator hardcodes
+    // sq_rd.data.pid = 0. Giving each stream its own ctid (for parallel RDMA queue pairs) needs a
+    // third per-stream register in hardware first, and NUM_READ_REQ_CONFIG_REGS bumped to match.
 
     /**
      * Triggers a read request using the `RDMARead` or `LocalRead` module.
