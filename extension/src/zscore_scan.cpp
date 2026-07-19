@@ -13,10 +13,12 @@
 #include <libstf/profiling.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace duckdb {
 
@@ -24,9 +26,18 @@ namespace {
 
 using libstf::Profiler;
 
-// Region prefix for the caliper report (mirrors parcore's convention). These three regions cover the
-// host feed steps the scheduler's own regions miss: the disk read, the buffer alloc, and the wait.
-const std::string prefix = "duckdb::zscore_scan::";
+// Caliper region names (mirrors parcore's "ns::Class::" convention). Built ONCE at file scope:
+// open_regions/close_regions take a const&, so passing these costs nothing per call. Building them
+// inline (`{prefix + "emit"}`) concatenates a string, heap-allocates and frees a vector on EVERY
+// call -- at ~49k calls per 100M-row scan that overhead dwarfed the regions themselves.
+const std::vector<std::string> kFunction   = {"duckdb::zscore_scan::function"};
+const std::vector<std::string> kLoadGroup  = {"duckdb::zscore_scan::load_group"};
+const std::vector<std::string> kFillWindow = {"duckdb::zscore_scan::fill_window"};
+const std::vector<std::string> kAllocate   = {"duckdb::zscore_scan::allocate"};
+const std::vector<std::string> kRead       = {"duckdb::zscore_scan::read"};
+const std::vector<std::string> kBuildFlow  = {"duckdb::zscore_scan::build_flow"};
+const std::vector<std::string> kCollect    = {"duckdb::zscore_scan::collect"};
+const std::vector<std::string> kEmit       = {"duckdb::zscore_scan::emit"};
 
 // Bind-time state: which file, the ParCore metadata (row groups + chunk layout), and the resolved
 // column index the z-score runs on.
@@ -34,6 +45,12 @@ struct ZScoreBindData : public TableFunctionData {
 	string filename;
 	parcore::metadata::Metadata metadata;
 	size_t column_id = 0;
+	// outliers_only: emit one BIGINT row id per outlier instead of one BOOLEAN per value. The scan then
+	// hands DuckDB ~20k rows instead of 100M, so neither the emit loop nor a downstream filter has to
+	// materialise and re-scan a bool per value.
+	bool outliers_only = false;
+	// First global row index of each row group, so outliers_only can report absolute row ids.
+	std::vector<int64_t> group_first_row;
 };
 
 // Shared across workers. The only mutable shared state is the row-group cursor (claimed atomically),
@@ -44,8 +61,20 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 	size_t total_groups = 0;
 	std::atomic<size_t> next_group {0};
 
+	// Workers already claim row groups atomically off next_group and each owns its own file handle and
+	// in-flight window, so the scan parallelises without further locking. Kept env-tunable because each
+	// worker holds up to WINDOW row-group buffers in flight -- threads x WINDOW hugepage buffers must
+	// still fit the pool, so sweep this rather than jumping straight to core count.
+	// OASIS_ZSCORE_THREADS=1 restores the old serial behaviour exactly.
 	idx_t MaxThreads() const override {
-		return 1;
+		const char *env = std::getenv("OASIS_ZSCORE_THREADS");
+		if (env) {
+			const int n = std::atoi(env);
+			if (n > 0) {
+				return (idx_t)n;
+			}
+		}
+		return 4;
 	}
 };
 
@@ -55,6 +84,7 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 struct InFlightZGroup {
 	oasis::SplinterResultHandle handle;
 	size_t num_values = 0;
+	int64_t first_row = 0; // global row index of this group's first value
 };
 
 // Per-worker state: this worker's file handle plus the flag buffer of the row group it is currently
@@ -70,6 +100,7 @@ struct ZScoreLocalState : public LocalTableFunctionState {
 	std::shared_ptr<libstf::Buffer> current_flags;
 	size_t current_offset = 0;    // values already emitted from current_flags
 	size_t current_remaining = 0; // values still to emit from current_flags
+	int64_t current_first_row = 0; // global row index of current_flags[0]
 };
 
 unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInput &input,
@@ -108,8 +139,26 @@ unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInp
 	bind_data->metadata = std::move(meta);
 	bind_data->column_id = col_id;
 
-	names.emplace_back("is_outlier");
-	return_types.emplace_back(LogicalType::BOOLEAN);
+	auto opt = input.named_parameters.find("outliers_only");
+	if (opt != input.named_parameters.end()) {
+		bind_data->outliers_only = BooleanValue::Get(opt->second);
+	}
+
+	// Prefix sum of per-group value counts: group g's first value is global row group_first_row[g].
+	bind_data->group_first_row.resize(bind_data->metadata.groups.size());
+	int64_t running = 0;
+	for (size_t g = 0; g < bind_data->metadata.groups.size(); g++) {
+		bind_data->group_first_row[g] = running;
+		running += (int64_t)bind_data->metadata.groups[g].chunks[col_id].num_values;
+	}
+
+	if (bind_data->outliers_only) {
+		names.emplace_back("row_id");
+		return_types.emplace_back(LogicalType::BIGINT);
+	} else {
+		names.emplace_back("is_outlier");
+		return_types.emplace_back(LogicalType::BOOLEAN);
+	}
 	return std::move(bind_data);
 }
 
@@ -158,15 +207,15 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 		// Read the compressed column-chunk bytes into one FPGA-mappable input buffer. Both z-score
 		// passes read from this same buffer (the host re-feeds the column; no second allocation).
 		void *ptr;
-		Profiler::open_regions({prefix + "allocate"});
+		Profiler::open_regions(kAllocate);
 		auto status = ctx.memory_pool()->allocate(cc.total_compressed_size, &ptr);
-		Profiler::close_regions({prefix + "allocate"});
+		Profiler::close_regions(kAllocate);
 		if (!status.ok()) {
 			throw IOException("Could not allocate z-score input buffer: " + status.message());
 		}
-		Profiler::open_regions({prefix + "read"});
+		Profiler::open_regions(kRead);
 		lstate.file_handle->Read(ptr, cc.total_compressed_size, cc.offset);
-		Profiler::close_regions({prefix + "read"});
+		Profiler::close_regions(kRead);
 		auto input_buf =
 		    libstf::make_buffer(ctx.memory_pool(), ptr, cc.total_compressed_size, cc.total_compressed_size);
 
@@ -174,6 +223,7 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 
 		// Two source+decode pairs = the z-score's 2-pass contract: pass 1 accumulates mean/variance,
 		// pass 2 classifies. The single sink receives the per-value outlier flags.
+		Profiler::open_regions(kBuildFlow);
 		oasis::OperatorFlow flow;
 		flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
 		flow.push_back(std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
@@ -184,8 +234,10 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 
 		oasis::QuerySplinter splinter;
 		splinter.streams.push_back(std::move(flow));
+		Profiler::close_regions(kBuildFlow);
 
-		return InFlightZGroup{ctx.scheduler().submit(std::move(splinter)), cc.num_values};
+		return InFlightZGroup{ctx.scheduler().submit(std::move(splinter)), cc.num_values,
+		                      bind.group_first_row[group]};
 	}
 }
 
@@ -194,6 +246,7 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 void FillWindow(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
                 const ZScoreBindData &bind) {
 	constexpr size_t WINDOW = 8;
+	Profiler::open_regions(kFillWindow);
 	while (lstate.in_flight.size() < WINDOW) {
 		auto g = SubmitGroup(ctx, gstate, lstate, bind);
 		if (!g) {
@@ -201,30 +254,36 @@ void FillWindow(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocal
 		}
 		lstate.in_flight.push_back(std::move(*g));
 	}
+	Profiler::close_regions(kFillWindow);
 }
 
 // Makes the next row group's flags current: tops up the pipeline, then collects the oldest in-flight
 // group (FIFO -> row-group order preserved). Returns false once all groups are consumed.
 bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
                    const ZScoreBindData &bind) {
+	Profiler::open_regions(kLoadGroup);
 	FillWindow(ctx, gstate, lstate, bind); // prime on the first call, top up thereafter
 	if (lstate.in_flight.empty()) {
+		Profiler::close_regions(kLoadGroup);
 		return false; // all row groups done
 	}
 
 	auto group = std::move(lstate.in_flight.front());
 	lstate.in_flight.pop_front();
 
-	Profiler::open_regions({prefix + "collect"});
+	Profiler::open_regions(kCollect);
 	auto batch = group.handle.get_next_batch(); // usually already complete: it was submitted groups ago
-	Profiler::close_regions({prefix + "collect"});
+	Profiler::close_regions(kCollect);
 	if (!batch) {
+		Profiler::close_regions(kLoadGroup);
 		throw InternalException("z-score flow closed with no output");
 	}
 
 	lstate.current_flags = std::move(batch->buffer);
 	lstate.current_offset = 0;
 	lstate.current_remaining = group.num_values;
+	lstate.current_first_row = group.first_row;
+	Profiler::close_regions(kLoadGroup);
 	return true;
 }
 
@@ -234,9 +293,49 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	auto &bind = data_p.bind_data->Cast<ZScoreBindData>();
 	auto &ctx = *gstate.ctx;
 
+	// Outermost region: every call into the table function. load_group/emit nest under it, so the
+	// report reads as a tree and `function` (I) accounts for the whole scan's host time.
+	Profiler::open_regions(kFunction);
+
+	if (bind.outliers_only) {
+		// Scan flags and emit only the outliers' row ids. A chunk may span several row groups (outliers
+		// are rare), so keep loading groups until the output vector fills or the groups run out --
+		// returning cardinality 0 is how DuckDB is told the scan is finished, so we must not do it early.
+		auto &vec = output.data[0];
+		vec.SetVectorType(VectorType::FLAT_VECTOR);
+		auto *out = FlatVector::GetDataMutable<int64_t>(vec);
+		idx_t n = 0;
+
+		while (n < STANDARD_VECTOR_SIZE) {
+			if (lstate.current_remaining == 0) {
+				if (!LoadNextGroup(ctx, gstate, lstate, bind)) {
+					break; // all row groups consumed
+				}
+			}
+			const auto *flags = reinterpret_cast<const int32_t *>(lstate.current_flags->ptr);
+			Profiler::open_regions(kEmit);
+			while (lstate.current_remaining > 0 && n < STANDARD_VECTOR_SIZE) {
+				if (flags[lstate.current_offset] != 0) {
+					out[n++] = lstate.current_first_row + (int64_t)lstate.current_offset;
+				}
+				lstate.current_offset++;
+				lstate.current_remaining--;
+			}
+			Profiler::close_regions(kEmit);
+			if (lstate.current_remaining == 0) {
+				lstate.current_flags = nullptr; // release; next iteration loads the next group
+			}
+		}
+
+		output.SetCardinality(n);
+		Profiler::close_regions(kFunction);
+		return;
+	}
+
 	if (lstate.current_remaining == 0) {
 		if (!LoadNextGroup(ctx, gstate, lstate, bind)) {
 			output.SetCardinality(0);
+			Profiler::close_regions(kFunction);
 			return;
 		}
 	}
@@ -248,9 +347,11 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	// This DuckDB fork makes FlatVector::GetData const; GetDataMutable is the writable accessor.
 	auto *out = FlatVector::GetDataMutable<bool>(vec);
 	const auto *flags = reinterpret_cast<const int32_t *>(lstate.current_flags->ptr);
+	Profiler::open_regions(kEmit);
 	for (size_t i = 0; i < emit; i++) {
 		out[i] = flags[lstate.current_offset + i] != 0;
 	}
+	Profiler::close_regions(kEmit);
 	output.SetCardinality(emit);
 
 	lstate.current_offset += emit;
@@ -258,6 +359,7 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	if (lstate.current_remaining == 0) {
 		lstate.current_flags = nullptr; // Release the flag buffer; next call loads the next group.
 	}
+	Profiler::close_regions(kFunction);
 }
 
 } // namespace
@@ -269,6 +371,7 @@ void RegisterZScoreFunction(ExtensionLoader &loader) {
 	                     ZScoreBind,                                         // Bind
 	                     ZScoreInitGlobal,                                   // Init global
 	                     ZScoreInitLocal);                                   // Init local
+	zscore.named_parameters["outliers_only"] = LogicalType::BOOLEAN;
 	loader.RegisterFunction(zscore);
 }
 
