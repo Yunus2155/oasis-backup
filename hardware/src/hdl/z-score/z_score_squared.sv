@@ -45,6 +45,21 @@ module my_z_score_squared
     logic signed [63:0]  a_psm [N_IN];
     logic        [4:0]   a_cnt;
     logic                a_valid, a_last;
+
+    // stage a is a pipelined 32x32 DSP square (int_mult_32) instead of a combinational number*number
+    // (which was the timing bottleneck). The IP has SQ_LAT cycles of latency, so value/keep/valid/last
+    // are delayed by matching pipelines and realigned with the product at the tail (same pattern as
+    // covariance.sv's keep_reg pipeline).
+    `ASSERT_ELAB(ELEM_BITS == 32)   // int_mult_32 is a fixed 32x32 IP
+    localparam int SQ_LAT  = 6;     // !! MUST match int_mult_32 PipeStages in init_ip.tcl
+    localparam int SQ_TAIL = SQ_LAT - 1;
+    logic signed [ELEM_BITS-1:0] lane_val  [N_IN];          // combinational per-lane value (square input)
+    logic                        lane_keep [N_IN];          // combinational per-lane keep (all bits set)
+    logic signed [63:0]          ip_psq    [N_IN];          // number^2, valid SQ_LAT cycles after input
+    logic signed [ELEM_BITS-1:0] val_reg   [SQ_LAT][N_IN];  // value delay line (aligns with ip_psq)
+    logic                        keep_reg  [SQ_LAT][N_IN];  // keep  delay line
+    logic                        sqvalid_reg [SQ_LAT];      // valid delay line
+    logic                        sqlast_reg  [SQ_LAT];      // last  delay line
     logic signed [63:0]  b_g4sq [4];
     logic signed [63:0]  b_g4sm [4];
     logic        [4:0]   b_cnt;
@@ -108,6 +123,20 @@ module my_z_score_squared
         end
     endgenerate
 
+    // Pass-1 squares: number^2 per lane via a pipelined 32x32 DSP IP (int_mult_32, SQ_LAT cycles).
+    // Free-running (CE=1); the value/keep/valid/last delay lines realign the metadata with ip_psq.
+    generate
+        for (genvar gi = 0; gi < N_IN; gi++) begin : gen_sq
+            assign lane_val [gi] = signed'(in.tdata[gi*ELEM_BITS +: ELEM_BITS]);
+            assign lane_keep[gi] = &in.tkeep[gi*KEEP_PER +: KEEP_PER];
+            int_mult_32 mult_sq (
+                .CLK(clk), .CE(1'b1),
+                .A(lane_val[gi]), .B(lane_val[gi]),
+                .P(ip_psq[gi])
+            );
+        end
+    endgenerate
+
     // tready: pass 1 ready until the pipe is draining; pass 2 ready when it can advance.
     assign in.tready = (state == accumulate)     ? !draining :
                        (state == output_z_score) ? pipe_adv  :
@@ -127,6 +156,7 @@ module my_z_score_squared
             a_last  <= 1'b0; b_last  <= 1'b0; c_last  <= 1'b0;
             draining        <= 1'b0;
             for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
+            for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
             out.tvalid      <= 1'b0;
             out.tdata       <= '0;
             out.tkeep       <= '0;
@@ -135,14 +165,31 @@ module my_z_score_squared
             case (state)
                 // ---- pass 1: accumulate Sum, Sum^2, count (pipelined) ----
                 accumulate: begin
-                    // stage a: per-lane products (bubble in when no beat is accepted)
+                    // stage a: per-lane squares via the pipelined IP. The value/keep/valid/last of the
+                    // beat presented now enter the delay lines at stage 0; the beat presented SQ_LAT
+                    // cycles ago is at the tail, in phase with its ip_psq product.
+                    sqvalid_reg[0] <= in.tvalid && in.tready;
+                    sqlast_reg [0] <= in.tvalid && in.tready && in.tlast;
+                    for (int i = 0; i < N_IN; i++) begin
+                        val_reg [0][i] <= lane_val [i];
+                        keep_reg[0][i] <= lane_keep[i];
+                    end
+                    for (k = 1; k < SQ_LAT; k++) begin
+                        sqvalid_reg[k] <= sqvalid_reg[k-1];
+                        sqlast_reg [k] <= sqlast_reg [k-1];
+                        for (int i = 0; i < N_IN; i++) begin
+                            val_reg [k][i] <= val_reg [k-1][i];
+                            keep_reg[k][i] <= keep_reg[k-1][i];
+                        end
+                    end
+
+                    // stage a tail: latch the product (or 0 for dropped lanes) and the aligned value.
                     begin
                         automatic logic [4:0] cnt = '0;
                         for (int i = 0; i < N_IN; i++) begin
-                            automatic logic signed [ELEM_BITS-1:0] number = signed'(in.tdata[i*ELEM_BITS +: ELEM_BITS]);
-                            if (&in.tkeep[i*KEEP_PER +: KEEP_PER]) begin
-                                a_psq[i] <= number * number;
-                                a_psm[i] <= 64'(number);
+                            if (keep_reg[SQ_TAIL][i]) begin
+                                a_psq[i] <= ip_psq[i];
+                                a_psm[i] <= 64'(val_reg[SQ_TAIL][i]);
                                 cnt = cnt + 1'b1;
                             end else begin
                                 a_psq[i] <= '0;
@@ -151,8 +198,8 @@ module my_z_score_squared
                         end
                         a_cnt <= cnt;
                     end
-                    a_valid <= in.tvalid && in.tready;
-                    a_last  <= in.tvalid && in.tready && in.tlast;
+                    a_valid <= sqvalid_reg[SQ_TAIL];
+                    a_last  <= sqlast_reg [SQ_TAIL];
 
                     // stage b: 16 -> 4
                     for (int j = 0; j < 4; j++) begin
@@ -188,6 +235,7 @@ module my_z_score_squared
                         a_valid  <= 1'b0;
                         b_valid  <= 1'b0;
                         c_valid  <= 1'b0;
+                        for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
                     end
                 end
 
@@ -254,6 +302,7 @@ module my_z_score_squared
                         a_valid <= 1'b0; b_valid <= 1'b0; c_valid <= 1'b0;
                         draining       <= 1'b0;
                         for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
+                        for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
                         state          <= accumulate;
                     end
                 end

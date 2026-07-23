@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
 
 `include "axi_macros.svh"
-`include "libstf_macros.svh"
 
 import libstf::data8_t;
 import libstf::data64_t;
@@ -29,19 +28,17 @@ module RDMARead #(
     ndata_i.m out        // #(data8_t, DATABEAT_SIZE)
 );
 
-`RESET_RESYNC // Reset pipelining
-
 localparam RDMA_READ = 12;
 
 // -- Request generation ---------------------------------------------------------------------------
-ready_valid_i #(read_req_t) req (clk, reset_synced);
+ready_valid_i #(read_req_t) req (clk, rst_n);
 
 ReadReqGenerator #(
     .OPCODE(RDMA_READ),
     .DEST(AXI_STRM_ID)
 ) inst_req_gen (
     .clk(clk),
-    .rst_n(reset_synced),
+    .rst_n(rst_n),
 
     .conf(conf),
     .sq_rd(sq_rd),
@@ -49,46 +46,34 @@ ReadReqGenerator #(
 );
 
 // -- Last fixing ----------------------------------------------------------------------------------
-ndata_i #(data8_t, DATABEAT_SIZE) in_ndata(clk, reset_synced);
+ndata_i #(data8_t, DATABEAT_SIZE) out_inner ();
 AXIToNData #(
   .data_t(data8_t),
   .NUM_ELEMENTS(DATABEAT_SIZE)
 ) inst_axi_to_ndata(
     .clk(clk),
-    .rst_n(reset_synced),
+    .rst_n(rst_n),
 
     .in(in),
-    .out(in_ndata)
+    .out(out_inner)
 );
 
 // DataRewriteLast needs just the length of the request whose data is currently streaming. Expose
 // the head-of-FIFO request's length on a ready/valid interface.
-ready_valid_i #(data64_t) req_len (clk, reset_synced);
+ready_valid_i #(data64_t) req_len (clk, rst_n);
 assign req_len.data  = req.data.len;
 assign req_len.valid = req.valid;
 assign req.ready     = req_len.ready;
 
-ndata_i #(data8_t, DATABEAT_SIZE) out_inner(clk, reset_synced);
 DataRewriteLast #(
     .data_t(data8_t),
     .NUM_ELEMENTS(DATABEAT_SIZE),
     .size_t(data64_t)
 ) inst_rewrite_last (
     .clk(clk),
-    .rst_n(reset_synced),
+    .rst_n(rst_n),
 
     .num_elements(req_len),
-
-    .in(in_ndata),
-    .out(out_inner)
-);
-
-NDataSkidBuffer #(
-    .data_t(data8_t),
-    .NUM_ELEMENTS(DATABEAT_SIZE)
-) inst_out_skid (
-    .clk(clk),
-    .rst_n(reset_synced),
 
     .in(out_inner),
     .out(out)
@@ -97,7 +82,7 @@ NDataSkidBuffer #(
 `ifdef SYNTHESIS
 ila_rdma_read inst_ila_rdma_read (
     .clk(clk),
-    .probe0(reset_synced),
+    .probe0(rst_n),
 
     .probe1(sq_rd.data),
     .probe2(sq_rd.valid),

@@ -10,11 +10,16 @@ set(FDEV_NAME u55c CACHE STRING "Target FPGA device (u55c, v80, ...)")
 # Number of ColumnChunkDecoders. The number of streams is equal to this in local mode. If RDMA is
 # enabled, there will be an additional RDMA bypass stream for the RDMAFileSystem.
 set(N_DECODERS 1 CACHE STRING "Number of ColumnChunkDecoders (default=1)")
-# Enable card-memory (HBM) streams so the shell exposes axis_card_send/recv + STRM_CARD DMA. Required
-# for the decode-once z-score path (CardWrite stores the decoded column to HBM in pass 1, CardRead
-# replays it in pass 2). FORCE because find_package(CoyoteHW) caches EN_MEM=0 by default.
-set(EN_MEM 1 CACHE STRING "Enable memory (HBM) streams" FORCE)
-set(N_CARD_AXI ${N_DECODERS} CACHE STRING "Number of card (HBM) AXI streams" FORCE)
+# HBM enabled: build the decode-once z-score (pass 1 caches the decoded column in HBM, pass 2 replays
+# it, so the decoder runs once). Set EN_MEM 0 for the build-05-style 2-pass z-score, which decodes
+# twice from the host but drops the shell HBM controller and its SLR-crossing timing failures
+# (vfpga_top.svh guards all card plumbing with `ifdef EN_MEM`). FORCE overrides the CoyoteHW default.
+set(EN_MEM 0 CACHE STRING "Enable memory (HBM) streams" FORCE)
+# One card stream per decoder: vfpga_top's decode-once path drives axis_card_send/recv[I] for every
+# lane I < NUM_DECODERS, so a fixed N_CARD_AXI=1 (the CoyoteHW default) would index past the array as
+# soon as N_DECODERS > 1 -- which the simulation needs, since its test framework requires an even
+# stream count. Must be set BEFORE find_package, like EN_MEM/FDEV_NAME, or the cached default wins.
+set(N_CARD_AXI ${N_DECODERS} CACHE STRING "Number of memory (HBM) streams" FORCE)
 
 find_package(CoyoteHW REQUIRED)
 

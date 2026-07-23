@@ -5,29 +5,32 @@
 
 import lynxTypes::AXI_DATA_BITS;
 import libstf::data8_t;
+import libstf::vaddress_t;
 import oasis::read_req_t;
 
 /*
  * Decode-once replay control for one z-score lane.
  *
- * Pass 1: passes the decoded stream straight through to the z-score AND counts how many bytes went
- *         by (the column was simultaneously stored to HBM by a sibling CardWrite at card vaddr
- *         CARD_VADDR). On the pass-1 tlast it latches the byte count.
+ * Pass 1: passes the decoded stream straight through to the z-score (the column is simultaneously
+ *         stored to HBM by a sibling CardWrite at card_vaddr).
  * Between passes: once the HBM store has completed (store_done), it issues a single card read
- *         (LOCAL_READ + STRM_CARD via LocalRead USE_CARD=1) of exactly that many bytes from
- *         CARD_VADDR. The returned data arrives on card_recv (axis_card_recv[AXI_STRM_ID]).
+ *         (LOCAL_READ + STRM_CARD via LocalRead USE_CARD=1) of store_bytes bytes from card_vaddr.
+ *         The returned data arrives on card_recv (axis_card_recv[AXI_STRM_ID]).
  * Pass 2: feeds the HBM-replayed data to the z-score instead of re-decoding. The z-score naturally
  *         backpressures (in.tready) until the replay data arrives, so no explicit "wait" is needed.
  *
- * EXPERIMENTAL — sim before synth. Key assumptions to verify: (1) store_done is a single pulse that
- * means "all pass-1 bytes are durably in HBM"; (2) card reads return on axis_card_recv[AXI_STRM_ID]
- * with the same dest; (3) the normalized stream invariant (full tkeep except last) holds so the byte
- * count from $countones(tkeep) equals the stored length.
+ * The replay length is NOT recomputed here -- it comes from the CardWrite's own notify
+ * (bytes_written_to_allocation), which is by definition how many bytes are actually in the buffer.
+ * An earlier version counted $countones(tkeep) over the raw pass-1 beats in parallel, which is both a
+ * second source of truth and wrong: StreamWriter counts the same thing only AFTER an
+ * AXINullBeatSuppressor, so the raw stream it never sees can poison the tally.
+ *
+ * EXPERIMENTAL. Key assumptions to verify: (1) store_done is a single pulse that means "all pass-1
+ * bytes are durably in HBM"; (2) card reads return on axis_card_recv[AXI_STRM_ID] with the same dest.
  */
 module ZScoreCardReplay #(
     parameter AXI_STRM_ID   = 0,
-    parameter DATABEAT_SIZE = AXI_DATA_BITS / 8,
-    parameter [63:0] CARD_VADDR = 0
+    parameter DATABEAT_SIZE = AXI_DATA_BITS / 8
 ) (
     input logic clk,
     input logic rst_n,
@@ -36,7 +39,15 @@ module ZScoreCardReplay #(
     AXI4S.s card_recv,    // axis_card_recv[AXI_STRM_ID] as AXI4S: HBM read return data
     metaIntf.m sq_rd,     // card read request (issued once, between passes)
 
+    // Host-allocated card buffer this lane replays from, straight off CardBufferConfig -- the SAME
+    // vaddr the sibling CardWrite stored to. It must be a real, TLB-mapped host allocation: Coyote
+    // has no card address space, so a vaddr invented here page-faults the vFPGA into the driver.
+    input vaddress_t card_vaddr,
+
     input logic store_done, // pulse: the sibling CardWrite finished storing pass 1 to HBM
+    // How many bytes that store actually wrote, straight from the CardWrite notify's
+    // bytes_written_to_allocation field. Valid with store_done; this is the replay read's length.
+    input logic [27:0] store_bytes,
 
     AXI4S.m zscore_in     // muxed stream into the z-score
 );
@@ -75,30 +86,26 @@ NDataToAXI #(data8_t, DATABEAT_SIZE) inst_card_ndata_to_axi (
 typedef enum logic [1:0] { PASS1, WAIT_STORE, ISSUE_READ, PASS2 } state_t;
 state_t state;
 
-logic [47:0] byte_count;   // bytes seen in pass 1 == bytes to replay
-logic        sel_card;     // 0 => decoded_in (pass 1), 1 => axi_card_replay (pass 2)
+logic sel_card;            // 0 => decoded_in (pass 1), 1 => axi_card_replay (pass 2)
 assign sel_card = (state == PASS2);
 
-// pass-1 / pass-2 beat handshakes (on the z-score-facing side)
-wire p1_beat   = (state == PASS1) && decoded_in.tvalid && decoded_in.tready;
-wire p1_last   = p1_beat && decoded_in.tlast;
-wire p2_last   = (state == PASS2) && zscore_in.tvalid && zscore_in.tready && zscore_in.tlast;
+// pass-1 / pass-2 last beats (on the z-score-facing side)
+wire p1_last = (state == PASS1) && decoded_in.tvalid && decoded_in.tready && decoded_in.tlast;
+wire p2_last = (state == PASS2) && zscore_in.tvalid && zscore_in.tready && zscore_in.tlast;
 
 always_ff @(posedge clk) begin
     if (!reset_synced) begin
-        state      <= PASS1;
-        byte_count <= '0;
+        state <= PASS1;
         card_conf.valid <= 1'b0;
     end else begin
         case (state)
             PASS1: begin
-                if (p1_beat) byte_count <= byte_count + $countones(decoded_in.tkeep);
                 if (p1_last) state <= WAIT_STORE;
             end
             WAIT_STORE: begin
                 if (store_done) begin
-                    card_conf.data.vaddr <= CARD_VADDR;
-                    card_conf.data.len   <= byte_count;
+                    card_conf.data.vaddr <= card_vaddr;
+                    card_conf.data.len   <= store_bytes;
                     card_conf.valid      <= 1'b1;
                     state                <= ISSUE_READ;
                 end
@@ -110,10 +117,7 @@ always_ff @(posedge clk) begin
                 end
             end
             PASS2: begin
-                if (p2_last) begin
-                    byte_count <= '0;
-                    state      <= PASS1;
-                end
+                if (p2_last) state <= PASS1;
             end
         endcase
     end

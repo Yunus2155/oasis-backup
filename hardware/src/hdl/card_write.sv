@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 import lynxTypes::*;
+import libstf::TRANSFER_SIZE_BYTES;
 
 `include "axi_macros.svh"
 `include "libstf_macros.svh"
@@ -17,9 +18,13 @@ import lynxTypes::*;
  * NOTE: input_data must be a normalized stream (tkeep all 1s except on the last beat), exactly like
  * OutputWriter requires, since StreamWriter packs beats into fixed-length transfers.
  */
+// NOTE: TRANSFER_LENGTH_BYTES must stay TRANSFER_SIZE_BYTES, matching OutputWriter. buffer_t's size
+// field is only BUFFER_SIZE_BITS wide (28 - $clog2(TRANSFER_SIZE_BYTES)) and StreamWriter reads it in
+// units of TRANSFER_LENGTH_BYTES, so any other value makes the writer interpret a host-packed buffer
+// size in the wrong units. The host packs it as capacity / BYTES_PER_FPGA_TRANSFER (= 65536).
 module CardWrite #(
     parameter AXI_STRM_ID = 0,
-    parameter TRANSFER_LENGTH_BYTES = 4096
+    parameter TRANSFER_LENGTH_BYTES = TRANSFER_SIZE_BYTES
 ) (
     input logic clk,
     input logic rst_n,

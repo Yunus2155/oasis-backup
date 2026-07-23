@@ -23,4 +23,16 @@ function automatic longint unsigned ZSCORE_PROFILE_READ_REGS(input int num_zscor
     return ZSCORE_PROFILE_INFO_REGS + ZSCORE_PROFILE_PROFILE_REGS * num_zscores;
 endfunction
 
+// -- CardBufferConfig: the host-supplied HBM scratch buffer for the decode-once replay -------------
+// The buffer the decoded column is cached in during pass 1 and replayed from during pass 2. The
+// vaddr CANNOT be invented in RTL: Coyote has no card address space (CoyoteAllocType has no CARD
+// option). A STRM_CARD descriptor carries a HOST USER VIRTUAL ADDRESS whose pages the driver
+// shadows into HBM via the TLB -- `strm` picks which copy of that vaddr the DMA hits, not a
+// different address space. An unmapped vaddr makes the vFPGA page-fault into the driver.
+// Write layout: one buffer_t register per lane, packed exactly like MemConfig's
+// (vaddr << BUFFER_SIZE_BITS | capacity_in_transfers). Read: [0] = CONFIG_ID, [1] = NUM_LANES.
+parameter longint unsigned CARD_BUFFER_CONFIG_ID   = 64'h3e8b71c4d20a5f19;
+parameter int              NUM_CARD_BUFFER_CONFIG_REGS = 1;
+parameter longint unsigned CARD_BUFFER_INFO_REGS   = 2;
+
 endpackage
