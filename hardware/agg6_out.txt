@@ -1,0 +1,220 @@
+
+****** Vivado v2022.1 (64-bit)
+  **** SW Build 3526262 on Mon Apr 18 15:47:01 MDT 2022
+  **** IP Build 3524634 on Mon Apr 18 20:55:01 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source inspect_agg6.tcl
+# set build "build-34"
+# if {$argc >= 1} { set build [lindex $argv 0] }
+# open_checkpoint "$build/checkpoints/shell_routed.dcp"
+Command: open_checkpoint build-34/checkpoints/shell_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.03 . Memory (MB): peak = 3159.082 ; gain = 0.000 ; free physical = 274537 ; free virtual = 366329
+INFO: [Device 21-403] Loading part xcu55c-fsvh2892-2L-e
+Netlist sorting complete. Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 4691.980 ; gain = 31.000 ; free physical = 272088 ; free virtual = 363880
+INFO: [Netlist 29-17] Analyzing 12924 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 4 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.1
+INFO: [Project 1-570] Preparing netlist for logic optimization
+WARNING: [Constraints 18-550] Could not create 'IBUF_LOW_PWR' constraint because net 'inst_shell/xclk' is not directly connected to top level port. Synthesis is ignored for IBUF_LOW_PWR but preserved for implementation.
+WARNING: [Constraints 18-550] Could not create 'IBUF_LOW_PWR' constraint because net 'inst_static/inst_int_static/clk_wiz_0/clk_in1' is not directly connected to top level port. Synthesis is ignored for IBUF_LOW_PWR but preserved for implementation.
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-4422] SNAPPING_MODE is set so implementation will use the DERIVED_RANGES which may be different then the GRID_RANGES.
+INFO: [Constraints 18-4421] A LAGUNA range, without usable sites, was added to DERIVED_RANGES for purposes of keeping the Programmable Unit together within the reconfigurable pblock.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_debug_bridge/inst/bs_switch/inst/BSCAN_SWITCH.N_EXT_BSCAN.u_bufg_icon_tck' is LOCed to site 'BUFGCE_X0Y73'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/BUFGCE_DIV_CLK2_inst' is LOCed to site 'BUFGCE_DIV_X0Y12'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/clkout1_buf' is LOCed to site 'BUFGCE_X0Y88'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/bufg_gt_sysclk' is LOCed to site 'BUFG_GT_X1Y27'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[0].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y6'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[10].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y54'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[11].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y58'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[12].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y93'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[13].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y90'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[14].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y95'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[15].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y87'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[1].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y20'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[2].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y23'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[3].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y5'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[4].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y41'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[5].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y34'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[6].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y28'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[7].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y33'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[8].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y63'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[9].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y65'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk' is LOCed to site 'BUFG_GT_X1Y72'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_intclk' is LOCed to site 'BUFG_GT_X1Y84'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_mcapclk' is LOCed to site 'BUFG_GT_X1Y94'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_pclk' is LOCed to site 'BUFG_GT_X1Y83'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_userclk' is LOCed to site 'BUFG_GT_X1Y74'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+INFO: [Project 1-853] Binary constraint restore complete.
+Reading XDEF placement.
+Reading placer database...
+Reading XDEF routing.
+Read XDEF Files: Time (s): cpu = 00:00:22 ; elapsed = 00:00:23 . Memory (MB): peak = 9591.918 ; gain = 911.203 ; free physical = 267936 ; free virtual = 359728
+Restored from archive | CPU: 23.010000 secs | Memory: 571.854706 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:22 ; elapsed = 00:00:23 . Memory (MB): peak = 9591.918 ; gain = 911.203 ; free physical = 267954 ; free virtual = 359746
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_debug_bridge/inst/bs_switch/inst/BSCAN_SWITCH.N_EXT_BSCAN.u_bufg_icon_tck' is LOCed to site 'BUFGCE_X0Y73'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/BUFGCE_DIV_CLK2_inst' is LOCed to site 'BUFGCE_DIV_X0Y12'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/clkout1_buf' is LOCed to site 'BUFGCE_X0Y88'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/bufg_gt_sysclk' is LOCed to site 'BUFG_GT_X1Y27'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[0].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y6'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[10].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y54'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[11].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y58'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[12].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y93'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[13].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y90'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[14].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y95'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[15].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y87'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[1].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y20'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[2].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y23'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[3].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y5'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[4].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y41'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[5].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y34'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[6].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y28'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[7].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y33'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[8].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y63'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[9].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y65'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk' is LOCed to site 'BUFG_GT_X1Y72'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_intclk' is LOCed to site 'BUFG_GT_X1Y84'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_mcapclk' is LOCed to site 'BUFG_GT_X1Y94'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_pclk' is LOCed to site 'BUFG_GT_X1Y83'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_userclk' is LOCed to site 'BUFG_GT_X1Y74'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+Netlist sorting complete. Time (s): cpu = 00:00:00.05 ; elapsed = 00:00:00.06 . Memory (MB): peak = 9591.918 ; gain = 0.000 ; free physical = 268160 ; free virtual = 359952
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1715 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 512 instances
+  RAM16X1D => RAM32X1D (RAMD32(x2)): 7 instances
+  RAM256X1S => RAM256X1S (MUXF7(x2), MUXF8, RAMS64E(x4)): 9 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 23 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 926 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 128 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 43 instances
+  SRLC32E => SRL16E: 67 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2022.1 (64-bit) build 3526262
+open_checkpoint: Time (s): cpu = 00:05:10 ; elapsed = 00:03:26 . Memory (MB): peak = 9591.918 ; gain = 6432.836 ; free physical = 268215 ; free virtual = 360007
+# proc dump_driver {net indent} {
+#     set drv [get_pins -leaf -of $net -filter {DIRECTION == OUT}]
+#     if {[llength $drv] == 0} {
+#         puts "${indent}driver: (none) net TYPE=[get_property TYPE $net]"
+#         return ""
+#     }
+#     set dc [lindex [get_cells -of [lindex $drv 0]] 0]
+#     set init ""
+#     catch { set init [get_property INIT $dc] }
+#     puts "${indent}driver: [get_property NAME $dc] REF=[get_property REF_NAME $dc] INIT=$init"
+#     return $dc
+# }
+# foreach ctr {egress_agg_beats egress_agg_stalled egress_agg_window} {
+#     puts "\n########## $ctr ##########"
+#     # bit-0 flop of the counter (there may be replicas; take them all, dedup by name)
+#     set flops [get_cells -hier -filter "NAME =~ *inst_user_c0_0*${ctr}_reg\\\[0\\\]*"]
+#     puts "  [llength $flops] flop(s) for ${ctr}\[0\]"
+#     if {[llength $flops] == 0} { continue }
+# 
+#     set seen_luts {}
+#     foreach f $flops {
+#         set qnet [get_nets -of [get_pins -of $f -filter {REF_PIN_NAME == Q}]]
+#         if {[llength $qnet] == 0} { continue }
+#         # every non-flop cell this counter bit feeds
+#         foreach lp [get_pins -leaf -of $qnet -filter {DIRECTION == IN}] {
+#             set lc [lindex [get_cells -of $lp] 0]
+#             set lname [get_property NAME $lc]
+#             set lref  [get_property REF_NAME $lc]
+#             if {![string match LUT* $lref]} { continue }
+#             if {[lsearch -exact $seen_luts $lname] >= 0} { continue }
+#             lappend seen_luts $lname
+#             set init ""
+#             catch { set init [get_property INIT $lc] }
+#             puts "\n  MUX-LUT $lname"
+#             puts "      REF=$lref INIT=$init   (counter enters on pin [get_property REF_PIN_NAME $lp])"
+#             # dump every input of this mux LUT and one level of its drivers
+#             foreach p [lsort [get_pins -of $lc -filter {DIRECTION == IN}]] {
+#                 set n [get_nets -of $p]
+#                 if {[llength $n] == 0} { continue }
+#                 puts "      [get_property REF_PIN_NAME $p] <= [get_property NAME $n]"
+#                 set dc [dump_driver $n "          "]
+#                 # if the driver is itself a LUT (comparator candidate), dump ITS input nets too
+#                 if {$dc ne "" && [string match LUT* [get_property REF_NAME $dc]]} {
+#                     foreach p2 [lsort [get_pins -of $dc -filter {DIRECTION == IN}]] {
+#                         set n2 [get_nets -of $p2]
+#                         if {[llength $n2] == 0} { continue }
+#                         puts "              [get_property REF_PIN_NAME $p2] <= [get_property NAME $n2]"
+#                     }
+#                 }
+#             }
+#         }
+#     }
+# }
+
+########## egress_agg_beats ##########
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ *inst_user_c0_0*egress_agg_beats_reg\[0\]*}'.
+  0 flop(s) for egress_agg_beats[0]
+
+########## egress_agg_stalled ##########
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ *inst_user_c0_0*egress_agg_stalled_reg\[0\]*}'.
+  0 flop(s) for egress_agg_stalled[0]
+
+########## egress_agg_window ##########
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {NAME =~ *inst_user_c0_0*egress_agg_window_reg\[0\]*}'.
+  0 flop(s) for egress_agg_window[0]
+# puts "\n== done =="
+
+== done ==
+# close_project
+close_project: Time (s): cpu = 00:00:07 ; elapsed = 00:00:09 . Memory (MB): peak = 9591.918 ; gain = 0.000 ; free physical = 272129 ; free virtual = 363922
+INFO: [Common 17-206] Exiting Vivado at Sat Jul 25 23:07:21 2026...

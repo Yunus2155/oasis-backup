@@ -1,0 +1,1 @@
+-debug "typical" "egress_aggregator_tb" -s "tb" 

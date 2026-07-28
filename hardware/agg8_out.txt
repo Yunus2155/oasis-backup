@@ -1,0 +1,399 @@
+
+****** Vivado v2022.1 (64-bit)
+  **** SW Build 3526262 on Mon Apr 18 15:47:01 MDT 2022
+  **** IP Build 3524634 on Mon Apr 18 20:55:01 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source inspect_agg8.tcl
+# set build "build-34"
+# if {$argc >= 1} { set build [lindex $argv 0] }
+# proc dump_reset_cone {} {
+#     foreach fname {egress_agg_window_reg[0] egress_agg_beats_reg[0] egress_agg_started_reg} {
+#         set fs [get_cells -hier -quiet -filter "NAME =~ *inst_user_c0_0*${fname}*"]
+#         if {[llength $fs] == 0} { puts "\n  -- $fname : NOT FOUND"; continue }
+#         set f [lindex $fs 0]
+#         puts "\n  -- $fname : [get_property NAME $f] REF=[get_property REF_NAME $f] ([llength $fs] match(es))"
+#         # FDRE reset pin is R; also dump CE for completeness
+#         foreach pinname {R CE D} {
+#             set p [get_pins -quiet -of $f -filter "REF_PIN_NAME == $pinname"]
+#             if {[llength $p] == 0} { continue }
+#             set n [get_nets -quiet -of $p]
+#             if {[llength $n] == 0} { continue }
+#             puts "     pin $pinname <= net [get_property NAME $n] (TYPE=[get_property TYPE $n])"
+#             set drv [get_pins -leaf -quiet -of $n -filter {DIRECTION == OUT}]
+#             if {[llength $drv] == 0} { continue }
+#             set dc [lindex [get_cells -of [lindex $drv 0]] 0]
+#             set init ""
+#             catch { set init [get_property INIT $dc] }
+#             puts "        L1 driver [get_property NAME $dc] REF=[get_property REF_NAME $dc] INIT=$init"
+#             if {![string match LUT* [get_property REF_NAME $dc]]} { continue }
+#             foreach p2 [lsort [get_pins -of $dc -filter {DIRECTION == IN}]] {
+#                 set n2 [get_nets -quiet -of $p2]
+#                 if {[llength $n2] == 0} { continue }
+#                 puts "           [get_property REF_PIN_NAME $p2] <= [get_property NAME $n2] (TYPE=[get_property TYPE $n2])"
+#                 set drv2 [get_pins -leaf -quiet -of $n2 -filter {DIRECTION == OUT}]
+#                 if {[llength $drv2] == 0} { continue }
+#                 set dc2 [lindex [get_cells -of [lindex $drv2 0]] 0]
+#                 set init2 ""
+#                 catch { set init2 [get_property INIT $dc2] }
+#                 puts "              L2 driver [get_property NAME $dc2] REF=[get_property REF_NAME $dc2] INIT=$init2"
+#                 if {[string match LUT* [get_property REF_NAME $dc2]]} {
+#                     foreach p3 [lsort [get_pins -of $dc2 -filter {DIRECTION == IN}]] {
+#                         set n3 [get_nets -quiet -of $p3]
+#                         if {[llength $n3] == 0} { continue }
+#                         puts "                 [get_property REF_PIN_NAME $p3] <= [get_property NAME $n3]"
+#                     }
+#                 }
+#             }
+#         }
+#     }
+# }
+# puts "\n################ SYNTH (user_synthed_c0_0.dcp) ################"
+
+################ SYNTH (user_synthed_c0_0.dcp) ################
+# open_checkpoint "$build/checkpoints/config_0/user_synthed_c0_0.dcp"
+Command: open_checkpoint build-34/checkpoints/config_0/user_synthed_c0_0.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.03 . Memory (MB): peak = 3159.082 ; gain = 0.000 ; free physical = 274516 ; free virtual = 366552
+INFO: [Device 21-403] Loading part xcu55c-fsvh2892-2L-e
+Netlist sorting complete. Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 3958.535 ; gain = 5.000 ; free physical = 272827 ; free virtual = 364863
+INFO: [Netlist 29-17] Analyzing 8650 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 3 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.1
+INFO: [Project 1-570] Preparing netlist for logic optimization
+CRITICAL WARNING: [Chipscope 16-321] The clk port : "clk" of instance : "inst_debug_bridge_user" is not connected to a valid source.
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+Netlist sorting complete. Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.03 . Memory (MB): peak = 4832.551 ; gain = 0.000 ; free physical = 271991 ; free virtual = 364027
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 608 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 608 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2022.1 (64-bit) build 3526262
+open_checkpoint: Time (s): cpu = 00:00:41 ; elapsed = 00:00:45 . Memory (MB): peak = 4832.551 ; gain = 1673.469 ; free physical = 271988 ; free virtual = 364024
+# dump_reset_cone
+
+  -- egress_agg_window_reg[0] : inst_user_c0_0/egress_agg_window_reg[0] REF=FDRE (2 match(es))
+     pin R <= net inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_synced_3
+                 I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/aresetn[0] (TYPE=SIGNAL)
+     pin CE <= net inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0 REF=FDRE INIT=1'b0
+     pin D <= net inst_user_c0_0/egress_agg_window_reg[0]_i_1_n_15 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/egress_agg_window_reg[0]_i_1 REF=CARRY8 INIT=
+
+  -- egress_agg_beats_reg[0] : inst_user_c0_0/egress_agg_beats_reg[0] REF=FDRE (2 match(es))
+     pin R <= net inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_synced_3
+                 I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/aresetn[0] (TYPE=SIGNAL)
+     pin CE <= net inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0 REF=FDRE INIT=1'b0
+     pin D <= net inst_user_c0_0/inst_output_writer_n_86 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_beats_reg[0]_i_1 REF=CARRY8 INIT=
+
+  -- egress_agg_started_reg : inst_user_c0_0/egress_agg_started_reg REF=FDRE (4 match(es))
+     pin R <= net inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_synced_3
+                 I1 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/aresetn[0] (TYPE=SIGNAL)
+     pin CE <= net inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0 REF=FDRE INIT=1'b0
+     pin D <= net inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_0 (TYPE=SIGNAL)
+              L2 driver inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0 REF=FDRE INIT=1'b0
+# close_project
+# puts "\n################ ROUTED (shell_routed.dcp) ################"
+
+################ ROUTED (shell_routed.dcp) ################
+# open_checkpoint "$build/checkpoints/shell_routed.dcp"
+Command: open_checkpoint build-34/checkpoints/shell_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 4832.551 ; gain = 0.000 ; free physical = 272752 ; free virtual = 364789
+Netlist sorting complete. Time (s): cpu = 00:00:05 ; elapsed = 00:00:05 . Memory (MB): peak = 4911.918 ; gain = 30.000 ; free physical = 272058 ; free virtual = 364094
+INFO: [Netlist 29-17] Analyzing 12924 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 4 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.1
+INFO: [Project 1-570] Preparing netlist for logic optimization
+WARNING: [Constraints 18-550] Could not create 'IBUF_LOW_PWR' constraint because net 'inst_shell/xclk' is not directly connected to top level port. Synthesis is ignored for IBUF_LOW_PWR but preserved for implementation.
+WARNING: [Constraints 18-550] Could not create 'IBUF_LOW_PWR' constraint because net 'inst_static/inst_int_static/clk_wiz_0/clk_in1' is not directly connected to top level port. Synthesis is ignored for IBUF_LOW_PWR but preserved for implementation.
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-4422] SNAPPING_MODE is set so implementation will use the DERIVED_RANGES which may be different then the GRID_RANGES.
+INFO: [Constraints 18-4421] A LAGUNA range, without usable sites, was added to DERIVED_RANGES for purposes of keeping the Programmable Unit together within the reconfigurable pblock.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_debug_bridge/inst/bs_switch/inst/BSCAN_SWITCH.N_EXT_BSCAN.u_bufg_icon_tck' is LOCed to site 'BUFGCE_X0Y73'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/BUFGCE_DIV_CLK2_inst' is LOCed to site 'BUFGCE_DIV_X0Y12'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/clkout1_buf' is LOCed to site 'BUFGCE_X0Y88'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/bufg_gt_sysclk' is LOCed to site 'BUFG_GT_X1Y27'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[0].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y6'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[10].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y54'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[11].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y58'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[12].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y93'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[13].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y90'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[14].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y95'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[15].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y87'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[1].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y20'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[2].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y23'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[3].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y5'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[4].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y41'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[5].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y34'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[6].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y28'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[7].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y33'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[8].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y63'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[9].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y65'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk' is LOCed to site 'BUFG_GT_X1Y72'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_intclk' is LOCed to site 'BUFG_GT_X1Y84'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_mcapclk' is LOCed to site 'BUFG_GT_X1Y94'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_pclk' is LOCed to site 'BUFG_GT_X1Y83'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_userclk' is LOCed to site 'BUFG_GT_X1Y74'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+INFO: [Project 1-853] Binary constraint restore complete.
+Reading XDEF placement.
+Reading placer database...
+Reading XDEF routing.
+Read XDEF Files: Time (s): cpu = 00:00:22 ; elapsed = 00:00:22 . Memory (MB): peak = 9597.418 ; gain = 913.219 ; free physical = 267899 ; free virtual = 359935
+Restored from archive | CPU: 22.870000 secs | Memory: 571.854782 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:22 ; elapsed = 00:00:23 . Memory (MB): peak = 9597.418 ; gain = 913.219 ; free physical = 267910 ; free virtual = 359946
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_debug_bridge/inst/bs_switch/inst/BSCAN_SWITCH.N_EXT_BSCAN.u_bufg_icon_tck' is LOCed to site 'BUFGCE_X0Y73'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/BUFGCE_DIV_CLK2_inst' is LOCed to site 'BUFGCE_DIV_X0Y12'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/clk_wiz_0/inst/clkout1_buf' is LOCed to site 'BUFGCE_X0Y88'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/bufg_gt_sysclk' is LOCed to site 'BUFG_GT_X1Y27'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[0].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y6'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[10].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y54'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[11].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y58'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[12].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y93'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[13].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y90'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[14].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y95'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[15].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y87'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[1].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y20'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[2].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y23'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[3].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y5'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[4].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y41'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[5].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y34'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[6].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y28'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[7].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y33'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[8].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y63'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/gt_wizard.gtwizard_top_i/design_static_xdma_0_0_pcie4c_ip_gt_i/inst/gen_gtwizard_gtye4_top.design_static_xdma_0_0_pcie4c_ip_gt_gtwizard_gtye4_inst/gen_gtwizard_gtye4.gen_cpll_cal_gtye4.gen_cpll_cal_inst[9].gen_inst_cpll_cal.gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_inst/gtwizard_ultrascale_v1_7_13_gtye4_cpll_cal_tx_i/bufg_gt_txoutclkmon_inst' is LOCed to site 'BUFG_GT_X1Y65'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_coreclk' is LOCed to site 'BUFG_GT_X1Y72'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_intclk' is LOCed to site 'BUFG_GT_X1Y84'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_mcapclk' is LOCed to site 'BUFG_GT_X1Y94'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_pclk' is LOCed to site 'BUFG_GT_X1Y83'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+WARNING: [Constraints 18-4434] Global Clock Buffer 'inst_static/inst_int_static/xdma_0/inst/pcie4c_ip_i/inst/design_static_xdma_0_0_pcie4c_ip_gt_top_i/diablo_gt.diablo_gt_phy_wrapper/phy_clk_i/bufg_gt_userclk' is LOCed to site 'BUFG_GT_X1Y74'. Using a LOC constraint to assign the placement of a Global Clock Buffer can result in sub-optimal placement results.
+Resolution: Remove the LOC constraint and use the CLOCK_REGION constraint to assign a Global Clock Buffer to a CLOCK_REGION.
+Netlist sorting complete. Time (s): cpu = 00:00:00.05 ; elapsed = 00:00:00.06 . Memory (MB): peak = 9597.418 ; gain = 0.000 ; free physical = 268057 ; free virtual = 360093
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1715 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 512 instances
+  RAM16X1D => RAM32X1D (RAMD32(x2)): 7 instances
+  RAM256X1S => RAM256X1S (MUXF7(x2), MUXF8, RAMS64E(x4)): 9 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 23 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 926 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 128 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 43 instances
+  SRLC32E => SRL16E: 67 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2022.1 (64-bit) build 3526262
+open_checkpoint: Time (s): cpu = 00:04:53 ; elapsed = 00:03:10 . Memory (MB): peak = 9597.418 ; gain = 4764.867 ; free physical = 268023 ; free virtual = 360060
+# dump_reset_cone
+
+  -- egress_agg_window_reg[0] : inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_window_reg[0] REF=FDRE (2 match(es))
+     pin R <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_buffer_reg[1]_0_repN_7_alias
+                 I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/peripheral_aresetn[0]_repN_9_alias (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_shell_ctrl_cc/inst_design_ctrl/proc_sys_reset_a/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N_replica_9 REF=FDRE INIT=1'b0
+     pin CE <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4 REF=FDRE INIT=1'b0
+     pin D <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_window_reg[0]_i_1_n_15 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_window_reg[0]_i_1 REF=CARRY8 INIT=
+
+  -- egress_agg_beats_reg[0] : inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_beats_reg[0] REF=FDRE (2 match(es))
+     pin R <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_buffer_reg[1]_0_repN_7_alias
+                 I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/peripheral_aresetn[0]_repN_9_alias (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_shell_ctrl_cc/inst_design_ctrl/proc_sys_reset_a/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N_replica_9 REF=FDRE INIT=1'b0
+     pin CE <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4 REF=FDRE INIT=1'b0
+     pin D <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer_n_86 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_beats_reg[0]_i_1 REF=CARRY8 INIT=
+
+  -- egress_agg_started_reg : inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started_reg REF=FDRE (4 match(es))
+     pin R <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started00_out (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_started_i_1 REF=LUT5 INIT=32'h0002FFFF
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/egress_agg_stalled_reg[0][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/egress_agg_started_reg_i_3 REF=CARRY8 INIT=
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/FSM_sequential_state[1]_i_3__1 REF=LUT3 INIT=8'hDF
+                 I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/reset_buffer_reg[1]_0_repN_7_alias
+                 I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/s_full
+                 I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_valid_reg
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/read_addr_reg[5][0] (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/axi_ctrl_arready_INST_0_i_4 REF=CARRY8 INIT=
+           I3 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/in\\.resp_valid_reg (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_zscore_profile_config/inst_read_regs/state_reg REF=FDRE INIT=1'b0
+           I4 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_config/inst_read_config_splitter/inst_read_fifo/peripheral_aresetn[0]_repN_9_alias (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_shell_ctrl_cc/inst_design_ctrl/proc_sys_reset_a/U0/ACTIVE_LOW_PR_OUT_DFF[0].FDRE_PER_N_replica_9 REF=FDRE INIT=1'b0
+     pin CE <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4 REF=FDRE INIT=1'b0
+     pin D <= net inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started0 (TYPE=SIGNAL)
+        L1 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started_i_2 REF=LUT3 INIT=8'hFE
+           I0 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/egress_agg_started (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/egress_agg_started_reg REF=FDRE INIT=1'b0
+           I1 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg REF=FDRE INIT=1'b0
+           I2 <= inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4_n_0 (TYPE=SIGNAL)
+              L2 driver inst_shell/inst_dynamic/inst_user_wrapper_0/inst_user_c0_0/inst_output_writer/genblk1[0].inst_stream_writer/inst_skid_buffer/inst_skid_buffer/valid_reg__0_rep__4 REF=FDRE INIT=1'b0
+# close_project
+close_project: Time (s): cpu = 00:00:07 ; elapsed = 00:00:09 . Memory (MB): peak = 9597.418 ; gain = 0.000 ; free physical = 271837 ; free virtual = 363874
+# puts "\n== done =="
+
+== done ==
+INFO: [Common 17-206] Exiting Vivado at Sun Jul 26 10:05:01 2026...
