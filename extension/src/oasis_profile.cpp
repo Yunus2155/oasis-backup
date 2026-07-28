@@ -180,6 +180,204 @@ void OasisProfileFunction(ClientContext &context, TableFunctionInput &data_p, Da
 	output.SetChildCardinality(count);
 }
 
+// -- oasis_egress_bandwidth() ---------------------------------------------------------------------
+// The one link-level number. Every other row in this file uses a per-lane window (each StreamProfiler
+// starts on its own first beat), so lanes cannot be summed into a PCIe rate without assuming their
+// windows align. These two counters share one clock across all egress streams, so bytes/seconds here
+// is the write-path bandwidth with no alignment assumption.
+struct EgressBandwidthState : public GlobalTableFunctionState {
+	oasis::ZScoreProfileConfig::EgressAggregate aggregate {};
+	bool emitted = false;
+};
+
+unique_ptr<FunctionData> OasisEgressBandwidthBind(ClientContext &context,
+                                                  TableFunctionBindInput &input,
+                                                  vector<LogicalType> &return_types,
+                                                  vector<string> &names) {
+	auto bind_data = make_uniq<OasisProfileBindData>();
+	auto add = [&](const char *name, LogicalType type) {
+		names.emplace_back(name);
+		return_types.push_back(std::move(type));
+	};
+	add("beats", LogicalType::UBIGINT);
+	add("stalled_cycles", LogicalType::UBIGINT);
+	add("window_cycles", LogicalType::UBIGINT);
+	add("bytes", LogicalType::UBIGINT);
+	add("seconds", LogicalType::DOUBLE);
+	add("throughput_gbps", LogicalType::DOUBLE);
+	add("stalled_pct", LogicalType::DOUBLE);
+
+	bind_data->names = names;
+	bind_data->types = return_types;
+	return std::move(bind_data);
+}
+
+unique_ptr<GlobalTableFunctionState> OasisEgressBandwidthInitGlobal(ClientContext &context,
+                                                                    TableFunctionInitInput &input) {
+	auto gstate = make_uniq<EgressBandwidthState>();
+
+	auto &ctx = GetOrCreateOasisContext(context);
+	auto config = ctx.config<oasis::ZScoreProfileConfig>();
+
+	// Plain ascending readout of the aggregate block: beats, stalled, window. All three are exact
+	// at ANY lane count (the hardware counters are link-level by construction), and reading window
+	// last clears the set for the next measurement.
+	// ⚠ REQUIRES a bitstream with the HARDENED agg_stop (registered compare in
+	// zscore_profile_config.sv). On the pre-fix build-34/35 bitstreams the synthesized clear fired
+	// on the whole aligned 8-register block around window, so this order read zeros there -- use
+	// the older workaround binary with those builds.
+	gstate->aggregate = config->read_egress_aggregate();
+
+	return std::move(gstate);
+}
+
+void OasisEgressBandwidthFunction(ClientContext &context, TableFunctionInput &data_p,
+                                  DataChunk &output) {
+	auto &gstate = data_p.global_state->Cast<EgressBandwidthState>();
+	if (gstate.emitted) {
+		output.SetChildCardinality(0);
+		return;
+	}
+
+	double bytes = static_cast<double>(gstate.aggregate.beats) * BYTES_PER_HANDSHAKE;
+	double seconds = static_cast<double>(gstate.aggregate.window_cycles) * CLOCK_PERIOD_NS * 1e-9;
+
+	double window = static_cast<double>(gstate.aggregate.window_cycles);
+
+	idx_t col = 0;
+	output.data[col++].SetValue(0, Value::UBIGINT(gstate.aggregate.beats));
+	output.data[col++].SetValue(0, Value::UBIGINT(gstate.aggregate.stalled_cycles));
+	output.data[col++].SetValue(0, Value::UBIGINT(gstate.aggregate.window_cycles));
+	output.data[col++].SetValue(0, Value::UBIGINT(static_cast<uint64_t>(bytes)));
+	output.data[col++].SetValue(0, Value::DOUBLE(seconds));
+	output.data[col++].SetValue(
+	    0, Value::DOUBLE(seconds > 0.0 ? bytes / seconds / 1e9 : 0.0));
+	output.data[col++].SetValue(
+	    0, Value::DOUBLE(window > 0.0
+	                         ? 100.0 * static_cast<double>(gstate.aggregate.stalled_cycles) / window
+	                         : 0.0));
+
+	gstate.emitted = true;
+	output.SetChildCardinality(1);
+}
+
+// -- oasis_agg_debug() ----------------------------------------------------------------------------
+// DEBUG: raw dump of the z-score profile config's register file around the appended aggregate block,
+// exactly as the hardware presents it. Localises the egress-counter readout bug -- whether stalled/
+// window are genuinely 0, shifted, or misread. The `is_agg` column flags the 3 aggregate registers
+// (base+0=beats, base+1=stalled, base+2=window). Reads ascending so the aggregate values are read
+// before the last-register read resets them.
+struct AggDebugState : public GlobalTableFunctionState {
+	std::vector<std::pair<uint32_t, uint64_t>> regs;
+	uint32_t agg_base = 0;
+	idx_t offset = 0;
+};
+
+unique_ptr<FunctionData> OasisAggDebugBind(ClientContext &context, TableFunctionBindInput &input,
+                                           vector<LogicalType> &return_types, vector<string> &names) {
+	auto bind_data = make_uniq<OasisProfileBindData>();
+	auto add = [&](const char *name, LogicalType type) {
+		names.emplace_back(name);
+		return_types.push_back(std::move(type));
+	};
+	add("reg", LogicalType::UBIGINT);
+	add("value", LogicalType::UBIGINT);
+	add("is_agg", LogicalType::BOOLEAN);
+	bind_data->names = names;
+	bind_data->types = return_types;
+	return std::move(bind_data);
+}
+
+unique_ptr<GlobalTableFunctionState> OasisAggDebugInitGlobal(ClientContext &context,
+                                                             TableFunctionInitInput &input) {
+	auto gstate = make_uniq<AggDebugState>();
+
+	auto &ctx = GetOrCreateOasisContext(context);
+	auto config = ctx.config<oasis::ZScoreProfileConfig>();
+	gstate->agg_base = config->aggregate_base();
+
+	// Sweep a window around the aggregate block: the last few per-lane registers through a couple
+	// past the aggregate, so an addressing shift shows up as values landing at the wrong index.
+	uint32_t lo = gstate->agg_base >= 4 ? gstate->agg_base - 4 : 0;
+	uint32_t hi = gstate->agg_base + 5;
+	gstate->regs = config->read_raw_range(lo, hi);
+
+	return std::move(gstate);
+}
+
+void OasisAggDebugFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+	auto &gstate = data_p.global_state->Cast<AggDebugState>();
+
+	idx_t remaining = gstate.regs.size() - gstate.offset;
+	idx_t count = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE);
+	if (count == 0) {
+		output.SetChildCardinality(0);
+		return;
+	}
+
+	for (idx_t i = 0; i < count; i++) {
+		const auto &r = gstate.regs[gstate.offset + i];
+		bool is_agg = r.first >= gstate.agg_base && r.first < gstate.agg_base + 3;
+		output.data[0].SetValue(i, Value::UBIGINT(r.first));
+		output.data[1].SetValue(i, Value::UBIGINT(r.second));
+		output.data[2].SetValue(i, Value::BOOLEAN(is_agg));
+	}
+
+	gstate.offset += count;
+	output.SetChildCardinality(count);
+}
+
+// -- oasis_agg_peek(reg) --------------------------------------------------------------------------
+// DEBUG: read exactly ONE register of the z-score profile config, nothing else. Discriminates the
+// read-ORDER hypothesis: after a query, `SELECT * FROM oasis_agg_peek(20)` reads window FIRST --
+// if it is nonzero alone but zero in the ascending dump, something clears the counters during the
+// ascending sequence; if it is zero even alone, the readout path itself is broken.
+struct AggPeekBindData : public TableFunctionData {
+	uint32_t reg = 0;
+};
+
+struct AggPeekState : public GlobalTableFunctionState {
+	uint32_t reg = 0;
+	uint64_t value = 0;
+	bool emitted = false;
+};
+
+unique_ptr<FunctionData> OasisAggPeekBind(ClientContext &context, TableFunctionBindInput &input,
+                                          vector<LogicalType> &return_types, vector<string> &names) {
+	auto bind_data = make_uniq<AggPeekBindData>();
+	bind_data->reg = static_cast<uint32_t>(input.inputs[0].GetValue<uint64_t>());
+	names.emplace_back("reg");
+	return_types.push_back(LogicalType::UBIGINT);
+	names.emplace_back("value");
+	return_types.push_back(LogicalType::UBIGINT);
+	return std::move(bind_data);
+}
+
+unique_ptr<GlobalTableFunctionState> OasisAggPeekInitGlobal(ClientContext &context,
+                                                            TableFunctionInitInput &input) {
+	auto &bind = input.bind_data->Cast<AggPeekBindData>();
+	auto gstate = make_uniq<AggPeekState>();
+	gstate->reg = bind.reg;
+
+	auto &ctx = GetOrCreateOasisContext(context);
+	auto regs = ctx.config<oasis::ZScoreProfileConfig>()->read_raw_range(bind.reg, bind.reg + 1);
+	gstate->value = regs.empty() ? 0 : regs.front().second;
+
+	return std::move(gstate);
+}
+
+void OasisAggPeekFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+	auto &gstate = data_p.global_state->Cast<AggPeekState>();
+	if (gstate.emitted) {
+		output.SetChildCardinality(0);
+		return;
+	}
+	output.data[0].SetValue(0, Value::UBIGINT(gstate.reg));
+	output.data[1].SetValue(0, Value::UBIGINT(gstate.value));
+	gstate.emitted = true;
+	output.SetChildCardinality(1);
+}
+
 } // namespace
 
 void RegisterOasisProfileFunction(ExtensionLoader &loader) {
@@ -191,6 +389,23 @@ void RegisterOasisProfileFunction(ExtensionLoader &loader) {
 	TableFunction zscore_profile_function("oasis_zscore_profile", {}, OasisProfileFunction,
 	                                       OasisProfileBind, OasisZScoreProfileInitGlobal);
 	loader.RegisterFunction(zscore_profile_function);
+
+	// The link-level PCIe write bandwidth: one row, one shared window across all egress streams.
+	TableFunction egress_bandwidth_function("oasis_egress_bandwidth", {},
+	                                        OasisEgressBandwidthFunction,
+	                                        OasisEgressBandwidthBind,
+	                                        OasisEgressBandwidthInitGlobal);
+	loader.RegisterFunction(egress_bandwidth_function);
+
+	// DEBUG: raw register dump around the aggregate block (localises the window/stalled=0 bug).
+	TableFunction agg_debug_function("oasis_agg_debug", {}, OasisAggDebugFunction, OasisAggDebugBind,
+	                                 OasisAggDebugInitGlobal);
+	loader.RegisterFunction(agg_debug_function);
+
+	// DEBUG: read a single z-score-profile register in isolation (read-order discriminator).
+	TableFunction agg_peek_function("oasis_agg_peek", {LogicalType::UBIGINT}, OasisAggPeekFunction,
+	                                OasisAggPeekBind, OasisAggPeekInitGlobal);
+	loader.RegisterFunction(agg_peek_function);
 }
 
 } // namespace duckdb

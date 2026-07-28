@@ -2,8 +2,11 @@
 
 #include "libstf/common.hpp"
 #include <coyote/cThread.hpp>
+#include <cstdint>
 #include <libstf/configuration.hpp>
 #include <parcore/configuration.hpp> // parcore::DecoderProfile (reused for the z-score stage)
+#include <utility>
+#include <vector>
 
 namespace oasis {
 
@@ -21,6 +24,9 @@ constexpr const uint64_t READ_REQ_CONFIG_ID   = 0x2f966a70f04c0e93;
 constexpr const uint64_t ZSCORE_PROFILE_CONFIG_ID   = 0x7a5c012e9b3d4f60;
 constexpr const uint32_t ZSCORE_PROFILE_INFO_REGS    = 2;
 constexpr const uint32_t ZSCORE_PROFILE_PROFILE_REGS = 8;
+// Three aggregate registers appended after the per-lane block: [beats][stalled][window]. See
+// common.sv.
+constexpr const uint32_t ZSCORE_PROFILE_AGG_REGS     = 3;
 
 /**
  * Configues a hardware read request module to fetch data.
@@ -76,6 +82,30 @@ class ZScoreProfileConfig : public libstf::Config {
     parcore::DecoderProfile read_profile(libstf::stream_t zscore);
 
     const libstf::stream_t num_zscores() const;
+
+    /**
+     * One link-level measurement of the PCIe write path: total 64-byte beats across ALL egress
+     * streams, the cycles at least one stream was back-pressured, and the elapsed cycles. The
+     * per-lane counters from read_profile() each use their own window, so they cannot be combined
+     * into a link rate; these share one clock and can be divided directly.
+     */
+    struct EgressAggregate {
+        uint64_t beats;
+        uint64_t stalled_cycles;
+        uint64_t window_cycles;
+    };
+    EgressAggregate read_egress_aggregate();
+
+    /**
+     * DEBUG: raw dump of this config's register file over [lo, hi). Returns (index, value) pairs
+     * exactly as the hardware presents them -- used to localise the egress-counter readout bug
+     * (are stalled/window genuinely 0, or shifted/misread?). Reads ascending so the aggregate values
+     * are captured before the last-register read resets them. Does not bounds-check against num_regs.
+     */
+    std::vector<std::pair<uint32_t, uint64_t>> read_raw_range(uint32_t lo, uint32_t hi);
+
+    /** Base register index of the appended aggregate block (beats/stalled/window). */
+    uint32_t aggregate_base() const;
 
     static constexpr uint64_t ID = ZSCORE_PROFILE_CONFIG_ID;
 

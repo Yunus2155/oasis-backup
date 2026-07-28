@@ -78,6 +78,9 @@ decoder_profile_i                    decoder_profiles[NUM_DECODERS]();
 // taps on axis_host_send -- see inst_egress_profile below.
 localparam NUM_ZSCORE_PROFILES = NUM_DECODERS + NUM_STREAMS;
 decoder_profile_i                    zscore_profiles [NUM_ZSCORE_PROFILES]();
+// Link-level egress counters -- driven at the bottom of this file, read out via ZScoreProfileConfig.
+logic [31:0]                         egress_agg_beats, egress_agg_stalled, egress_agg_window;
+logic                                egress_agg_stop;
 `ifdef EN_MEM
 mem_config_i                         card_mem_conf[NUM_DECODERS](.*);
 `endif
@@ -153,7 +156,12 @@ ZScoreProfileConfig #(
 
     .read_config(read_configs[3]),
 
-    .profile(zscore_profiles)
+    .profile(zscore_profiles),
+
+    .agg_beats  ({32'b0, egress_agg_beats}),
+    .agg_stalled({32'b0, egress_agg_stalled}),
+    .agg_window ({32'b0, egress_agg_window}),
+    .agg_stop   (egress_agg_stop)
 );
 
 `ifdef EN_MEM
@@ -594,4 +602,64 @@ for (genvar I = 0; I < NUM_STREAMS; I++) begin
 
         .profile(egress_profiles[I])
     );
+end
+
+// -- Link-level egress window ---------------------------------------------------------------------
+// The per-lane profilers above each start on THEIR OWN first beat and stop at their own last stream,
+// so their windows are independent: summing three lanes' bytes and dividing by one lane's window
+// silently assumes the windows align, which nothing guarantees. This pair fixes that by measuring
+// once across all streams -- egress_agg_beats counts every 64B beat that crossed ANY host-send
+// stream, egress_agg_window counts elapsed cycles from the first such beat until the host reads the
+// counters out. Dividing them needs no alignment assumption:
+//     PCIe write GB/s = (beats x DATABEAT_SIZE) / (window x 4ns)   @250MHz
+// Gap cycles (no stream valid anywhere) are staged in egress_agg_gap and only committed to the
+// window when the next beat arrives -- same trick as StreamProfiler's idle_acc_reg -- so the window
+// effectively ends at the LAST beat and the value does not depend on when the host reads it.
+// Flatten the interface array into plain vectors first: an interface array can only be indexed by a
+// genvar, not by a procedural loop variable inside always_comb.
+logic [NUM_STREAMS - 1:0] egress_valid, egress_beat, egress_blocked;
+for (genvar I = 0; I < NUM_STREAMS; I++) begin
+    assign egress_valid  [I] = axis_host_send[I].tvalid;
+    assign egress_beat   [I] = axis_host_send[I].tvalid &&  axis_host_send[I].tready;
+    assign egress_blocked[I] = axis_host_send[I].tvalid && !axis_host_send[I].tready;
+end
+
+logic egress_any_valid, egress_any_blocked;
+logic [$clog2(NUM_STREAMS + 1) - 1:0] egress_beats_this_cycle;
+
+always_comb begin
+    egress_any_valid        = |egress_valid;
+    // A cycle counts as stalled if ANY stream had a beat ready that the DMA would not take. This is
+    // the link-level backpressure fraction: no per-lane window, no alignment assumption.
+    egress_any_blocked      = |egress_blocked;
+    egress_beats_this_cycle = '0;
+    for (int i = 0; i < NUM_STREAMS; i++) begin
+        egress_beats_this_cycle += egress_beat[i];
+    end
+end
+
+logic        egress_agg_started;
+logic [31:0] egress_agg_gap;
+always_ff @(posedge clk) begin
+    if (!rst_n || egress_agg_stop) begin
+        egress_agg_started <= 1'b0;
+        egress_agg_beats   <= '0;
+        egress_agg_stalled <= '0;
+        egress_agg_window  <= '0;
+        egress_agg_gap     <= '0;
+    end else if (egress_agg_started || egress_any_valid) begin
+        egress_agg_started <= 1'b1;
+        if (egress_any_valid) begin
+            // Commit this cycle plus any staged gap since the previous valid cycle. stalled and
+            // beats can only move on valid cycles, so they need no staging.
+            egress_agg_beats   <= egress_agg_beats   + egress_beats_this_cycle;
+            egress_agg_stalled <= egress_agg_stalled + egress_any_blocked;
+            egress_agg_window  <= egress_agg_window  + egress_agg_gap + 1;
+            egress_agg_gap     <= '0;
+        end else begin
+            // No stream valid anywhere: stage the cycle. If no beat ever follows (query is over),
+            // this is discarded uncommitted -- the window ends at the last beat.
+            egress_agg_gap <= egress_agg_gap + 1;
+        end
+    end
 end

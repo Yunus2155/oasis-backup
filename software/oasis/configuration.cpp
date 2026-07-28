@@ -47,6 +47,31 @@ parcore::DecoderProfile ZScoreProfileConfig::read_profile(libstf::stream_t zscor
     return profile;
 }
 
+ZScoreProfileConfig::EgressAggregate ZScoreProfileConfig::read_egress_aggregate() {
+    // Appended after the per-lane block, so the base moves with the lane count.
+    auto base = ZSCORE_PROFILE_INFO_REGS + num_zscores_ * ZSCORE_PROFILE_PROFILE_REGS;
+
+    EgressAggregate aggregate;
+    aggregate.beats = read_register(base + 0).value();
+    aggregate.stalled_cycles = read_register(base + 1).value();
+    // Read last: reading this register is what pulses agg_stop and resets the set.
+    aggregate.window_cycles = read_register(base + 2).value();
+    return aggregate;
+}
+
+uint32_t ZScoreProfileConfig::aggregate_base() const {
+    return ZSCORE_PROFILE_INFO_REGS + num_zscores_ * ZSCORE_PROFILE_PROFILE_REGS;
+}
+
+std::vector<std::pair<uint32_t, uint64_t>> ZScoreProfileConfig::read_raw_range(uint32_t lo,
+                                                                               uint32_t hi) {
+    std::vector<std::pair<uint32_t, uint64_t>> out;
+    for (uint32_t reg = lo; reg < hi; reg++) {
+        out.emplace_back(reg, read_register(reg).value());
+    }
+    return out;
+}
+
 const libstf::stream_t ZScoreProfileConfig::num_zscores() const { return num_zscores_; }
 
 } // namespace oasis

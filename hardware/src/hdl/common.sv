@@ -16,11 +16,18 @@ typedef struct packed {
 // -- ZScoreProfileConfig: read-only readout of the per-lane z-score StreamProfiler counters --------
 // Layout mirrors the decoder profile readout: [0] = CONFIG_ID, [1] = NUM_ZSCORES, then 8 counters
 // per z-score lane (4 input-stream + 4 output-stream).
+// The 3 aggregate registers are APPENDED after the per-lane block so every existing index keeps its
+// meaning: [.. per-lane ..][beats][stalled][window]. They carry one link-level measurement -- total
+// 64B beats across ALL egress streams, the cycles at least one stream was back-pressured, and the
+// elapsed cycles -- because the per-lane profilers each start on their own first beat and so have no
+// common timebase to divide by. `window` is read LAST: that read is what resets the set.
 parameter longint unsigned ZSCORE_PROFILE_CONFIG_ID    = 64'h7a5c012e9b3d4f60;
 parameter longint unsigned ZSCORE_PROFILE_INFO_REGS    = 2;
 parameter longint unsigned ZSCORE_PROFILE_PROFILE_REGS = 8;
+parameter longint unsigned ZSCORE_PROFILE_AGG_REGS     = 3;
 function automatic longint unsigned ZSCORE_PROFILE_READ_REGS(input int num_zscores);
-    return ZSCORE_PROFILE_INFO_REGS + ZSCORE_PROFILE_PROFILE_REGS * num_zscores;
+    return ZSCORE_PROFILE_INFO_REGS + ZSCORE_PROFILE_PROFILE_REGS * num_zscores
+         + ZSCORE_PROFILE_AGG_REGS;
 endfunction
 
 // -- CardBufferConfig: the host-supplied HBM scratch buffer for the decode-once replay -------------
