@@ -30,6 +30,8 @@ namespace {
 
 using libstf::Profiler;
 
+bool PerGroupMode(); // T2 diagnostic, defined below
+
 // Caliper region names (mirrors parcore's "ns::Class::" convention). Built ONCE at file scope:
 // open_regions/close_regions take a const&, so passing these costs nothing per call. Building them
 // inline (`{prefix + "emit"}`) concatenates a string, heap-allocates and frees a vector on EVERY
@@ -101,10 +103,19 @@ struct ZScoreLocalState : public LocalTableFunctionState {
 	// order, exactly like the old one-at-a-time path.
 	std::deque<InFlightZGroup> in_flight;
 
+	// A row group's flags do NOT always arrive in one buffer: the output writer raises one interrupt
+	// per completed buffer, so under load a group can be split across several. Observed on hardware
+	// at 12 host threads -- a 122,880-value group came back as 122,784 values plus a remainder.
+	// Reading the group as a single buffer meant reading past what the FPGA had written, which
+	// produced garbage flags and row ids that changed between runs.
+	std::deque<std::shared_ptr<libstf::Buffer>> pending_batches; // rest of this group, in order
 	std::shared_ptr<libstf::Buffer> current_flags;
-	size_t current_offset = 0;    // values already emitted from current_flags
-	size_t current_remaining = 0; // values still to emit from current_flags
-	int64_t current_first_row = 0; // global row index of current_flags[0]
+	size_t current_flags_values = 0; // values still unread in current_flags
+	size_t current_flags_pos = 0;    // read position within current_flags
+	size_t current_offset = 0;    // values already emitted from THIS ROW GROUP (drives the row id)
+	size_t current_remaining = 0; // values still to emit from this row group
+	int64_t current_first_row = 0; // global row index of this group's first value
+	size_t short_by = 0;           // values the flow never delivered (diagnostic mode only)
 };
 
 unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInput &input,
@@ -190,6 +201,21 @@ unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInp
 	return std::move(bind_data);
 }
 
+// Whole-column statistics supplied by the caller, for the phase-1 bypass diagnostic. Given as
+// OASIS_ZSCORE_STATS="count,sum,sum_square" (the values gen_tpch.py / get_taxi.py already record in
+// the manifest). Deliberately NOT computed with context.Query() here: InitGlobal runs inside the
+// query that is being planned, and re-entering the same ClientContext deadlocks -- that is what hung
+// the first attempt, not the accelerator.
+oasis::ZScoreStatsConfig::Statistics ParseSuppliedStatistics(const char *spec) {
+	oasis::ZScoreStatsConfig::Statistics stats;
+	if (sscanf(spec, "%llu,%lld,%lld", (unsigned long long *)&stats.count, (long long *)&stats.sum,
+	           (long long *)&stats.sum_square) != 3) {
+		throw InvalidInputException(
+		    "OASIS_ZSCORE_STATS must be \"count,sum,sum_square\", got '%s'", spec);
+	}
+	return stats;
+}
+
 // PHASE 1 of the global z-score: streams every row group through the operator in STATS mode and adds
 // up the per-group partials it returns.
 //
@@ -222,6 +248,13 @@ oasis::ZScoreStatsConfig::Statistics ComputeGlobalStatistics(ClientContext &cont
 		auto batch = handle.get_next_batch();
 		if (!batch) {
 			throw InternalException("z-score statistics flow closed with no output");
+		}
+		// Drain the flow to completion before dropping the handle. Phase 1 submits one flow per row
+		// group -- hundreds of them -- immediately before phase 2 submits hundreds more. Leaving a
+		// flow half-consumed leaves its completion state behind in the scheduler, and a stale buffer
+		// then surfaces on a LATER handle: phase 2 pairs another group's flags with this group's
+		// first_row, which shows up as correct-looking counts with row ids that shift between runs.
+		while (handle.get_next_batch()) {
 		}
 		if (batch->buffer->size < STATS_BEAT_BYTES) {
 			throw InternalException("z-score statistics beat is %llu bytes, expected at least %llu",
@@ -279,9 +312,32 @@ unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, Ta
 
 	// Phase 1 -> totals -> phase 2. The mode switch is only safe because nothing is in flight: the
 	// stats pass is fully drained before the totals are published, and no scan thread has started.
+	if (PerGroupMode()) {
+		// Run no statistics pass, but DO write the mode register once, with LEGACY. On a bitstream
+		// that has ZScoreStatsConfig the operator holds its input off until `mode_valid` is set, so
+		// skipping the write entirely leaves it refusing data forever -- seen as a hang on build-39.
+		// A pre-global bitstream has no such config and nothing to write, which is not an error.
+		try {
+			gstate->ctx->config<oasis::ZScoreStatsConfig>()->set_mode(
+			    oasis::ZScoreStatsConfig::Mode::Legacy);
+		} catch (const std::exception &) {
+			// Pre-global bitstream (e.g. build-38): LEGACY-only by construction, nothing to set.
+		}
+		return std::move(gstate);
+	}
+
 	auto stats_config = gstate->ctx->config<oasis::ZScoreStatsConfig>();
-	stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Stats);
-	const auto totals = ComputeGlobalStatistics(context, *gstate->ctx, bind);
+	oasis::ZScoreStatsConfig::Statistics totals;
+	if (const char *supplied = std::getenv("OASIS_ZSCORE_STATS")) {
+		// Diagnostic: skip phase 1 and compute the whole-column statistics on the CPU, so phase 2
+		// runs on its own. Splits the global path in two -- if the short-flow loss survives this it
+		// belongs to phase 2 / CLASSIFY; if it disappears it belongs to phase 1 or to the hand-over
+		// between the phases. The results are identical either way, so correctness still applies.
+		totals = ParseSuppliedStatistics(supplied);
+	} else {
+		stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Stats);
+		totals = ComputeGlobalStatistics(context, *gstate->ctx, bind);
+	}
 
 	// OASIS_ZSCORE_DEBUG_STATS=1 prints the totals phase 1 assembled, so they can be diffed against
 	// the exact values computed on the CPU. A mismatch localises a wrong result to phase 1
@@ -357,6 +413,12 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 		oasis::OperatorFlow flow;
 		flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
 		flow.push_back(std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
+		if (PerGroupMode()) {
+			// LEGACY needs the column twice: pass 1 accumulates this group's stats, pass 2 classifies.
+			flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
+			flow.push_back(
+			    std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
+		}
 		auto flag_buf = ctx.allocate_output_buffer(flag_size);
 		flow.push_back(std::make_unique<oasis::LocalSinkOperator>(std::move(flag_buf), 0));
 
@@ -385,6 +447,28 @@ void FillWindow(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocal
 	Profiler::close_regions(kFillWindow);
 }
 
+// T2 diagnostic: OASIS_ZSCORE_PER_GROUP=1 reproduces the ORIGINAL per-row-group path on top of the
+// current software -- no phase 1, the mode register is never written (so the operator stays in
+// LEGACY), and every row group is submitted as its own 2-pass flow. Used to tell whether the
+// short-flow beat loss arrived with the two-phase global work or predates it. Results are per-row-
+// group z-scores by construction, so only the SHORT-flow count is meaningful in this mode.
+bool PerGroupMode() {
+	static const bool on = std::getenv("OASIS_ZSCORE_PER_GROUP") != nullptr;
+	return on;
+}
+
+// Moves on to the next buffer of the current row group once the current one is fully read. A group's
+// flags can span several buffers (one interrupt per completed buffer), and every read must stay
+// inside the buffer it belongs to.
+void AdvanceFlagBuffer(ZScoreLocalState &lstate) {
+	while (lstate.current_flags_values == 0 && !lstate.pending_batches.empty()) {
+		lstate.current_flags = std::move(lstate.pending_batches.front());
+		lstate.pending_batches.pop_front();
+		lstate.current_flags_values = lstate.current_flags->size / sizeof(int32_t);
+		lstate.current_flags_pos = 0;
+	}
+}
+
 // Makes the next row group's flags current: tops up the pipeline, then collects the oldest in-flight
 // group (FIFO -> row-group order preserved). Returns false once all groups are consumed.
 bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocalState &lstate,
@@ -407,9 +491,62 @@ bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLo
 		throw InternalException("z-score flow closed with no output");
 	}
 
-	lstate.current_flags = std::move(batch->buffer);
+	// Collect every buffer this flow produced until the group's flags are complete. One interrupt is
+	// raised per completed buffer, so a group can arrive in several pieces; taking only the first
+	// one silently reads unwritten memory past its end.
+	const size_t expected = group.num_values * sizeof(int32_t);
+	size_t collected = batch->buffer->size;
+	lstate.pending_batches.clear();
+	lstate.pending_batches.push_back(std::move(batch->buffer));
+	while (collected < expected) {
+		auto more = group.handle.get_next_batch();
+		if (!more) {
+			// OASIS_ZSCORE_TOLERATE_SHORT=1 keeps going instead of throwing, so one query can report
+			// EVERY short flow at once. That tells us whether the missing beats reappear in another
+			// flow (totals conserved, a buffer/flow misalignment) or are simply gone (data loss).
+			if (std::getenv("OASIS_ZSCORE_TOLERATE_SHORT") || std::getenv("OASIS_ZSCORE_IGNORE_SHORT")) {
+				fprintf(stderr, "[zscore] SHORT flow: %llu of %llu bytes, first_row=%lld values=%llu\n",
+				        (unsigned long long)collected, (unsigned long long)expected,
+				        (long long)group.first_row, (unsigned long long)group.num_values);
+				break;
+			}
+			throw InternalException(
+			    "z-score flow ended after %llu of %llu flag bytes for a %llu value row group",
+			    (unsigned long long)collected, (unsigned long long)expected,
+			    (unsigned long long)group.num_values);
+		}
+		collected += more->buffer->size;
+		lstate.pending_batches.push_back(std::move(more->buffer));
+	}
+	if (collected > expected) {
+		throw InternalException("z-score flow produced %llu flag bytes, expected %llu",
+		                        (unsigned long long)collected, (unsigned long long)expected);
+	}
+	// A short flow leaves the tail of the group unread; clamp so we never read past what arrived.
+	lstate.short_by = (expected - collected) / sizeof(int32_t);
+
+	// OASIS_ZSCORE_IGNORE_SHORT=1 reads the group in FULL even when the completion reported fewer
+	// bytes. This separates two very different failures: if the results are still exactly right, the
+	// flags WERE written and only the reported length is wrong (a notify/size-accounting bug); if
+	// they are wrong, beats really are missing from memory. The buffer is allocated for the whole
+	// group either way, so reading it is in-bounds.
+	const bool ignore_short =
+	    lstate.short_by != 0 && std::getenv("OASIS_ZSCORE_IGNORE_SHORT") && lstate.pending_batches.size() == 1;
+	if (ignore_short) {
+		lstate.short_by = 0;
+	}
+
+	lstate.current_flags = std::move(lstate.pending_batches.front());
+	lstate.pending_batches.pop_front();
+	lstate.current_flags_values = lstate.current_flags->size / sizeof(int32_t);
+	if (ignore_short) {
+		// Read the whole group out of the buffer that was allocated for it, past the length the
+		// completion reported.
+		lstate.current_flags_values = group.num_values;
+	}
+	lstate.current_flags_pos = 0;
 	lstate.current_offset = 0;
-	lstate.current_remaining = group.num_values;
+	lstate.current_remaining = group.num_values - lstate.short_by;
 	lstate.current_first_row = group.first_row;
 	Profiler::close_regions(kLoadGroup);
 	return true;
@@ -440,12 +577,16 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 					break; // all row groups consumed
 				}
 			}
+			AdvanceFlagBuffer(lstate);
 			const auto *flags = reinterpret_cast<const int32_t *>(lstate.current_flags->ptr);
 			Profiler::open_regions(kEmit);
-			while (lstate.current_remaining > 0 && n < STANDARD_VECTOR_SIZE) {
-				if (flags[lstate.current_offset] != 0) {
+			// Bounded by what is left in THIS buffer as well as by the group and the output vector.
+			while (lstate.current_flags_values > 0 && n < STANDARD_VECTOR_SIZE) {
+				if (flags[lstate.current_flags_pos] != 0) {
 					out[n++] = lstate.current_first_row + (int64_t)lstate.current_offset;
 				}
+				lstate.current_flags_pos++;
+				lstate.current_flags_values--;
 				lstate.current_offset++;
 				lstate.current_remaining--;
 			}
@@ -468,7 +609,9 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 		}
 	}
 
-	const size_t emit = std::min<size_t>(lstate.current_remaining, STANDARD_VECTOR_SIZE);
+	AdvanceFlagBuffer(lstate);
+	// Never read past the current buffer: a row group can span several of them.
+	const size_t emit = std::min<size_t>(lstate.current_flags_values, STANDARD_VECTOR_SIZE);
 
 	auto &vec = output.data[0];
 	vec.SetVectorType(VectorType::FLAT_VECTOR);
@@ -477,11 +620,13 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	const auto *flags = reinterpret_cast<const int32_t *>(lstate.current_flags->ptr);
 	Profiler::open_regions(kEmit);
 	for (size_t i = 0; i < emit; i++) {
-		out[i] = flags[lstate.current_offset + i] != 0;
+		out[i] = flags[lstate.current_flags_pos + i] != 0;
 	}
 	Profiler::close_regions(kEmit);
 	output.SetCardinality(emit);
 
+	lstate.current_flags_pos += emit;
+	lstate.current_flags_values -= emit;
 	lstate.current_offset += emit;
 	lstate.current_remaining -= emit;
 	if (lstate.current_remaining == 0) {

@@ -32,9 +32,22 @@ RESULTS="${2:-results.csv}"
 DB="${OASIS_DUCKDB:-$HOME/duckdb-global}"
 THREADS="${THREADS:-1 4 8 16 32}"
 REPS="${REPS:-3}"
-# 4 host threads per decoder lane keeps all lanes fed on the 3-lane build; below that the lanes
-# starve and the measured window becomes noisy (see the egress-counter measurements).
-export OASIS_ZSCORE_THREADS="${OASIS_ZSCORE_THREADS:-12}"
+# 4, not more: at 6+ host threads the FPGA drops whole 64-byte beats from a row group's flag
+# stream (measured 2026-08-05: 0 short flows in 5 runs at 1/2/4 threads, 8 in 5 runs at 6, and
+# more at 8/12). The loss is below the host -- no flow receives the missing bytes -- so it cannot
+# be worked around here. 4 threads is the fastest setting that is lossless; zscore_scan.cpp throws
+# if a flow ever comes up short, so a regression cannot pass silently.
+export OASIS_ZSCORE_THREADS="${OASIS_ZSCORE_THREADS:-4}"
+
+# REFERENCE=group benchmarks the ORIGINAL per-row-group semantics on BOTH sides: the CPU baseline
+# normalises each parquet row group on its own statistics, and the FPGA is put in the same mode via
+# OASIS_ZSCORE_PER_GROUP (which also keeps the operator in LEGACY, so a pre-global bitstream such as
+# build-38 can be measured). Setting both here means the two sides cannot drift apart.
+REFERENCE="${REFERENCE:-global}"
+if [[ "$REFERENCE" == group ]]; then
+	export OASIS_ZSCORE_PER_GROUP=1
+fi
+echo "reference: $REFERENCE   fpga per-group: ${OASIS_ZSCORE_PER_GROUP:-0}"
 
 PROFILE_DIR="$(dirname "$RESULTS")/profiles"
 mkdir -p "$PROFILE_DIR"
@@ -68,8 +81,18 @@ tail -n +2 "$DATASETS" | while IFS=, read -r file _type _enc rows _cbytes _bpv r
 			SET threads=$t;
 			.timer on
 			$(for _ in $(seq $((REPS + 1))); do
-				echo "WITH s AS (SELECT avg(x::DOUBLE) m, stddev_pop(x::DOUBLE) sd FROM read_parquet('$file'))"
-				echo "SELECT count(*) FROM read_parquet('$file'), s WHERE abs((x::DOUBLE - m) / sd) > 3;"
+				if [[ "$REFERENCE" == group ]]; then
+					# Row groups are not uniform in size, so boundaries come from the footer and each
+					# row is attached to its group with an ASOF join.
+					echo "WITH meta AS (SELECT row_group_id AS rg, coalesce(sum(num_values) OVER (ORDER BY row_group_id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS start_row FROM parquet_metadata('$file')),"
+					echo "     d AS (SELECT x, file_row_number AS frn FROM read_parquet('$file', file_row_number = true)),"
+					echo "     j AS (SELECT d.x, meta.rg FROM d ASOF JOIN meta ON d.frn >= meta.start_row),"
+					echo "     s AS (SELECT rg, avg(x::DOUBLE) m, stddev_pop(x::DOUBLE) sd FROM j GROUP BY rg)"
+					echo "SELECT count(*) FROM j JOIN s USING (rg) WHERE s.sd > 0 AND abs((j.x::DOUBLE - s.m) / s.sd) > 3;"
+				else
+					echo "WITH s AS (SELECT avg(x::DOUBLE) m, stddev_pop(x::DOUBLE) sd FROM read_parquet('$file'))"
+					echo "SELECT count(*) FROM read_parquet('$file'), s WHERE abs((x::DOUBLE - m) / sd) > 3;"
+				fi
 			done)
 		SQL
 		)
