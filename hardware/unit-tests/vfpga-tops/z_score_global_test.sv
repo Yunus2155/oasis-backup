@@ -4,9 +4,13 @@ import oasis::*;
 
 `include "axi_macros.svh"
 
-// Standalone test of celeris my_z_score_squared in the oasis sim environment.
-// Local mode (ENABLE_RDMA=OFF): N_STRM_AXI == 1, input arrives on axis_host_recv[0].
-// The host feeds the SAME column twice (2-pass): pass 1 accumulates stats, pass 2 classifies.
+// Test top for the GLOBAL (whole-column) z-score modes. Same wiring as z_score_test.sv, but the
+// z-score's mode/statistics inputs come from a real ZScoreStatsConfig instead of being tied to
+// LEGACY, so the Python test can drive them over AXI-Lite.
+//
+// Config slots: [0] = MemConfig (the OutputWriter's buffers, discovered by the test framework),
+// [1] = ZScoreStatsConfig. GlobalConfig itself occupies registers 0..2, so slot 0 starts at 3 and
+// the stats registers start at 3 + MEM_REGS -- the Python test computes the same offset.
 
 // -- Tie-off unused interfaces and signals --------------------------------------------------------
 always_comb sq_rd.tie_off_m();
@@ -34,14 +38,16 @@ end
 // -- Configuration --------------------------------------------------------------------------------
 // MemConfig write side needs NUM_STREAMS+1 regs, read side needs 3.
 localparam int MEM_REGS = (N_STRM_AXI + 1 > 3) ? N_STRM_AXI + 1 : 3;
+localparam int STATS_REGS =
+    (ZSCORE_STATS_WRITE_REGS > ZSCORE_STATS_READ_REGS) ? ZSCORE_STATS_WRITE_REGS : ZSCORE_STATS_READ_REGS;
 
-write_config_i write_configs[1](.*);
-read_config_i  read_configs [1](.*);
+write_config_i write_configs[2](.*);
+read_config_i  read_configs [2](.*);
 
 GlobalConfig #(
     .SYSTEM_ID(OASIS_SYSTEM_ID),
-    .NUM_CONFIGS(1),
-    .ADDR_SPACE_SIZES({MEM_REGS})
+    .NUM_CONFIGS(2),
+    .ADDR_SPACE_SIZES({MEM_REGS, STATS_REGS})
 ) inst_config (
     .clk(clk),
     .rst_n(rst_n),
@@ -65,6 +71,26 @@ MemConfig #(
     .out(mem_config)
 );
 
+logic [1:0]         zscore_mode;
+logic [31:0]        zscore_global_count;
+logic signed [63:0] zscore_global_sum;
+logic signed [63:0] zscore_global_sum_square;
+logic               zscore_mode_valid;
+
+ZScoreStatsConfig inst_zscore_stats_config (
+    .clk(clk),
+    .rst_n(rst_n),
+
+    .write_config(write_configs[1]),
+    .read_config (read_configs [1]),
+
+    .mode             (zscore_mode),
+    .mode_valid       (zscore_mode_valid),
+    .global_count     (zscore_global_count),
+    .global_sum       (zscore_global_sum),
+    .global_sum_square(zscore_global_sum_square)
+);
+
 // -- Z-score (squared, division-free) -------------------------------------------------------------
 `AXIS_ASSIGN(axis_host_recv[0], zscore_in) // AXI4SR to AXI4S
 
@@ -80,12 +106,11 @@ my_z_score_squared inst_z_score (
 
     .profile(zscore_profile),
 
-    // Global-z-score control unused here: LEGACY keeps the original per-stream 2-pass behaviour.
-    .mode(2'd0),
-    .mode_valid(1'b1),
-    .global_count(32'd0),
-    .global_sum(64'sd0),
-    .global_sum_square(64'sd0)
+    .mode             (zscore_mode),
+    .mode_valid       (zscore_mode_valid),
+    .global_count     (zscore_global_count),
+    .global_sum       (zscore_global_sum),
+    .global_sum_square(zscore_global_sum_square)
 );
 
 // -- Output writer --------------------------------------------------------------------------------

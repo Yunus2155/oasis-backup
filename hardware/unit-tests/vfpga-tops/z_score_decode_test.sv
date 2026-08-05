@@ -123,7 +123,14 @@ my_z_score_squared inst_z_score (
     .in(axi_decoded),
     .out(axi_zscore),
 
-    .profile(zscore_profile)
+    .profile(zscore_profile),
+
+    // Global-z-score control unused here: LEGACY keeps the original per-stream 2-pass behaviour.
+    .mode(2'd0),
+    .mode_valid(1'b1),
+    .global_count(32'd0),
+    .global_sum(64'sd0),
+    .global_sum_square(64'sd0)
 );
 
 /* -- OUTPUT ------------------------------------------------------------ */

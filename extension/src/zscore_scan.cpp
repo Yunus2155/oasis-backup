@@ -2,6 +2,8 @@
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "oasis/configuration.hpp"
 #include "oasis/oasis_context.hpp"
 #include "oasis/operator.hpp"
 #include "oasis/query_splinter.hpp"
@@ -13,8 +15,10 @@
 #include <libstf/profiling.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -78,9 +82,9 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 	}
 };
 
-// One row group submitted to the FPGA and awaiting its flags. The scheduler owns the 2-pass flow (and
-// so keeps the input buffer mapped through BOTH passes) until it completes; we hold the handle to
-// collect the flag buffer and num_values to know how many flags it carries.
+// One row group submitted to the FPGA and awaiting its flags. This is phase 2 (CLASSIFY), so the flow
+// is a single pass over the group; the scheduler keeps the input buffer mapped until it completes and
+// we hold the handle to collect the flag buffer, with num_values telling us how many flags it carries.
 struct InFlightZGroup {
 	oasis::SplinterResultHandle handle;
 	size_t num_values = 0;
@@ -134,6 +138,30 @@ unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInp
 		                      column_name);
 	}
 
+	// Pass 1 accumulates Sum(x^2) into the 64-bit signed sum_square_reg of z_score_squared.sv. That
+	// register wraps silently on overflow -- the run still completes and still returns flags, they are
+	// just wrong -- so reject the column here instead. Worst case is N * max(|x|)^2, bounded from the
+	// footer statistics; columns without statistics are let through with no check (nothing to test).
+	int64_t abs_max = 0;
+	if (ParquetInt32ColumnAbsMax(parquet_reader, col_id, abs_max)) {
+		uint64_t num_rows = 0;
+		for (auto &group : meta.groups) {
+			num_rows += group.chunks[col_id].num_values;
+		}
+		const unsigned __int128 worst_sum_sq =
+		    (unsigned __int128)num_rows * (unsigned __int128)abs_max * (unsigned __int128)abs_max;
+		if (worst_sum_sq > (unsigned __int128)std::numeric_limits<int64_t>::max()) {
+			const double worst_approx = (double)num_rows * (double)abs_max * (double)abs_max;
+			throw BinderException(
+			    "zscore() would overflow the hardware sum-of-squares accumulator on column '%s': "
+			    "%s rows with max |value| %s can reach ~%s, above the 64-bit signed limit "
+			    "9223372036854775807. Rescale the column so that rows * max(|value|)^2 stays below "
+			    "that limit (for example store currency in whole units rather than cents).",
+			    column_name, std::to_string(num_rows), std::to_string(abs_max),
+			    StringUtil::Format("%.3g", worst_approx));
+		}
+	}
+
 	auto bind_data = make_uniq<ZScoreBindData>();
 	bind_data->filename = parquet_file;
 	bind_data->metadata = std::move(meta);
@@ -162,11 +190,110 @@ unique_ptr<FunctionData> ZScoreBind(ClientContext &context, TableFunctionBindInp
 	return std::move(bind_data);
 }
 
+// PHASE 1 of the global z-score: streams every row group through the operator in STATS mode and adds
+// up the per-group partials it returns.
+//
+// This exists because the hardware can never see the whole column as one stream -- `tlast` arrives at
+// the end of every parquet column chunk, and that is exactly what ends pass 1. Chaining all the row
+// groups into a single flow would just produce N independent pass1/pass2 pairs, not one. Sum, sum of
+// squares and count are additive though, so the totals assembled here are exactly the whole-column
+// statistics, and phase 2 classifies against them.
+//
+// Deliberately serial: it runs once, in InitGlobal, before any scan thread starts, which is what
+// gives the barrier between the two phases. The submit window still keeps the decoder fed.
+oasis::ZScoreStatsConfig::Statistics ComputeGlobalStatistics(ClientContext &context,
+                                                            oasis::OasisContext &ctx,
+                                                            const ZScoreBindData &bind) {
+	constexpr size_t WINDOW = 8;
+	// One 64-byte beat per row group: [0] count, [1] sum, [2] sum_square, as three int64s.
+	constexpr size_t STATS_BEAT_BYTES = 64;
+
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto file_handle = fs.OpenFile(bind.filename, FileOpenFlags::FILE_FLAGS_READ);
+
+	std::deque<oasis::SplinterResultHandle> in_flight;
+	oasis::ZScoreStatsConfig::Statistics totals;
+	size_t next_group = 0;
+
+	// Collects one finished STATS stream and folds its partials into the running totals.
+	auto collect_one = [&]() {
+		auto handle = std::move(in_flight.front());
+		in_flight.pop_front();
+		auto batch = handle.get_next_batch();
+		if (!batch) {
+			throw InternalException("z-score statistics flow closed with no output");
+		}
+		if (batch->buffer->size < STATS_BEAT_BYTES) {
+			throw InternalException("z-score statistics beat is %llu bytes, expected at least %llu",
+			                        (unsigned long long)batch->buffer->size,
+			                        (unsigned long long)STATS_BEAT_BYTES);
+		}
+		const auto *words = reinterpret_cast<const int64_t *>(batch->buffer->ptr);
+		totals.count += (uint64_t)words[0];
+		totals.sum += words[1];
+		totals.sum_square += words[2];
+	};
+
+	while (next_group < bind.metadata.groups.size() || !in_flight.empty()) {
+		while (in_flight.size() < WINDOW && next_group < bind.metadata.groups.size()) {
+			const auto &cc = bind.metadata.groups[next_group++].chunks[bind.column_id];
+			if (cc.num_values == 0) {
+				continue;
+			}
+
+			void *ptr;
+			auto status = ctx.memory_pool()->allocate(cc.total_compressed_size, &ptr);
+			if (!status.ok()) {
+				throw IOException("Could not allocate z-score statistics input buffer: " + status.message());
+			}
+			file_handle->Read(ptr, cc.total_compressed_size, cc.offset);
+			auto input_buf =
+			    libstf::make_buffer(ctx.memory_pool(), ptr, cc.total_compressed_size, cc.total_compressed_size);
+
+			// One source+decode: STATS mode runs pass 1 and then emits the partials instead of
+			// classifying, so there is no second pass over this group here.
+			oasis::OperatorFlow flow;
+			flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
+			flow.push_back(
+			    std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, parcore::metadata::to_libstf_type(cc.type)));
+			flow.push_back(std::make_unique<oasis::LocalSinkOperator>(
+			    ctx.allocate_output_buffer(STATS_BEAT_BYTES), 0));
+
+			oasis::QuerySplinter splinter;
+			splinter.streams.push_back(std::move(flow));
+			in_flight.push_back(ctx.scheduler().submit(std::move(splinter)));
+		}
+		if (!in_flight.empty()) {
+			collect_one();
+		}
+	}
+
+	return totals;
+}
+
 unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
 	auto &bind = input.bind_data->Cast<ZScoreBindData>();
 	auto gstate = make_uniq<ZScoreGlobalState>();
 	gstate->ctx = &GetOrCreateOasisContext(context);
 	gstate->total_groups = bind.metadata.groups.size();
+
+	// Phase 1 -> totals -> phase 2. The mode switch is only safe because nothing is in flight: the
+	// stats pass is fully drained before the totals are published, and no scan thread has started.
+	auto stats_config = gstate->ctx->config<oasis::ZScoreStatsConfig>();
+	stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Stats);
+	const auto totals = ComputeGlobalStatistics(context, *gstate->ctx, bind);
+
+	// OASIS_ZSCORE_DEBUG_STATS=1 prints the totals phase 1 assembled, so they can be diffed against
+	// the exact values computed on the CPU. A mismatch localises a wrong result to phase 1
+	// (partials lost or double-counted) rather than to the classification pass.
+	if (std::getenv("OASIS_ZSCORE_DEBUG_STATS")) {
+		fprintf(stderr, "[zscore] phase-1 totals: n=%llu sum=%lld sum_square=%lld\n",
+		        (unsigned long long)totals.count, (long long)totals.sum, (long long)totals.sum_square);
+	}
+
+	stats_config->set_global_statistics(totals);
+	stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Classify);
+
 	return std::move(gstate);
 }
 
@@ -180,8 +307,9 @@ unique_ptr<LocalTableFunctionState> ZScoreInitLocal(ExecutionContext &context, T
 	return std::move(lstate);
 }
 
-// Submits one row group's 2-pass z-score flow to the scheduler WITHOUT blocking, returning the handle
-// to collect its flags later. Claims the next group atomically, skips empty ones, and returns nullopt
+// Submits one row group's CLASSIFY pass to the scheduler WITHOUT blocking, returning the handle to
+// collect its flags later. The whole-column statistics were already published by phase 1 in
+// ZScoreInitGlobal, so this is a single pass over the group. Claims the next group atomically, skips empty ones, and returns nullopt
 // once the row groups are exhausted (nothing submitted).
 std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate,
                                           ZScoreLocalState &lstate, const ZScoreBindData &bind) {
@@ -221,12 +349,12 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 
 		const auto type = parcore::metadata::to_libstf_type(cc.type);
 
-		// Two source+decode pairs = the z-score's 2-pass contract: pass 1 accumulates mean/variance,
-		// pass 2 classifies. The single sink receives the per-value outlier flags.
+		// ONE source+decode: in CLASSIFY mode the operator does no pass 1, it compares straight
+		// against the whole-column statistics phase 1 published (see ZScoreStatsConfig). The column
+		// still crosses PCIe twice per query -- once in phase 1, once here -- exactly as it did when
+		// each row group carried its own 2-pass, so this costs no extra bandwidth.
 		Profiler::open_regions(kBuildFlow);
 		oasis::OperatorFlow flow;
-		flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
-		flow.push_back(std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
 		flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
 		flow.push_back(std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
 		auto flag_buf = ctx.allocate_output_buffer(flag_size);

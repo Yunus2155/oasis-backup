@@ -8,7 +8,20 @@ module my_z_score_squared
   input  logic rst_n,
     AXI4S.s in,
     AXI4S.m out,
-    decoder_profile_i.m profile);   // in = pass1+pass2 input stream, out = pass2 flag output stream
+    decoder_profile_i.m profile,   // in = pass1+pass2 input stream, out = pass2 flag output stream
+
+  // Global-z-score control from ZScoreStatsConfig (see common.sv). LEGACY leaves the operator exactly
+  // as it was: one stream = pass 1 + pass 2, normalised on itself. The two new modes split that in
+  // half so the host can normalise against the WHOLE column instead of one row group.
+  input  logic [1:0]         mode,
+  // High once the host has actually written the mode register. Until then the operator refuses input:
+  // the AXI-Lite config write and the data stream are independent paths and the data can arrive
+  // first, in which case an unconfigured operator would consume it as a LEGACY pass 1. Tie this high
+  // in tops that wire `mode` to a constant.
+  input  logic               mode_valid,
+  input  logic [31:0]        global_count,
+  input  logic signed [63:0] global_sum,
+  input  logic signed [63:0] global_sum_square);
 
 `RESET_RESYNC // Reset pipelining (provides reset_synced)
 
@@ -23,8 +36,18 @@ module my_z_score_squared
     // + squaring IP (MULT_LAT). The metadata pipeline is this deep so valid/keep/last stay aligned.
     localparam int PASS2_LAT = 2*MULT_LAT + 1;
 
+    // Mode encoding -- MUST match ZSCORE_MODE_* in hardware/src/hdl/common.sv. Kept as local
+    // constants rather than an `import oasis::*` so this module still elaborates standalone in the
+    // unit-test tops, which do not pull in the oasis package.
+    localparam logic [1:0] MODE_LEGACY   = 2'd0;
+    localparam logic [1:0] MODE_STATS    = 2'd1;
+    localparam logic [1:0] MODE_CLASSIFY = 2'd2;
+
     // ---- accumulator + state ----
-    typedef enum logic [2:0] {accumulate, compute_wait, compute_sub, compute_scale, output_z_score} state_t;
+    // output_stats is the STATS-mode tail: instead of running pass 2, emit one beat carrying this
+    // stream's (count, sum, sum_square) so the host can add the row groups up itself.
+    typedef enum logic [2:0] {accumulate, compute_wait, compute_sub, compute_scale, output_z_score,
+                              output_stats} state_t;
     state_t state;
     logic signed [63:0]     sum_reg;
     logic signed [63:0]     sum_square_reg;
@@ -138,9 +161,17 @@ module my_z_score_squared
     endgenerate
 
     // tready: pass 1 ready until the pipe is draining; pass 2 ready when it can advance.
-    assign in.tready = (state == accumulate)     ? !draining :
+    // In CLASSIFY mode there is no pass 1, so `accumulate` must not swallow beats -- it is only a
+    // one-cycle staging state that loads the host-supplied totals and jumps to the threshold compute.
+    assign in.tready = (state == accumulate)     ? (!draining && mode_valid && mode != MODE_CLASSIFY) :
                        (state == output_z_score) ? pipe_adv  :
                                                    1'b0;
+
+    // The STATS-mode result beat: count, sum and sum_square as three 64-bit little-endian words in
+    // the low 24 bytes of the beat, the rest zero. Kept 64-bit-aligned so the host can read it as
+    // three int64s. Sampled a cycle after pass 1 finishes, so the accumulators are final.
+    logic [IN_BITS-1:0] stats_beat;
+    assign stats_beat = {{(IN_BITS-192){1'b0}}, sum_square_reg, sum_reg, 32'b0, count_reg};
 
     integer k;
     always_ff @(posedge clk) begin
@@ -224,12 +255,34 @@ module my_z_score_squared
                         count_reg      <= count_reg      + 32'(c_cnt);
                     end
 
+                    // CLASSIFY: there is no pass 1 in this mode. Load the host-supplied totals into
+                    // the very registers pass 1 would have filled and jump straight to the threshold
+                    // compute. Everything downstream (mult_ss/mult_nq for the threshold, nx_a and
+                    // s1_diff for pass 2) reads only these three registers, so the compute and
+                    // classify datapaths need no changes at all.
+                    // Arm as soon as the mode says CLASSIFY -- deliberately NOT gated on in.tvalid.
+                    // Gating on it deadlocks: `accumulate` holds tready low in this mode, and a
+                    // source that waits for tready before asserting tvalid then never starts the
+                    // next stream. Caught in sim: after the first stream the operator sat in
+                    // `accumulate` forever and streams 2..N were never presented.
+                    // Leaving the armed state when the host switches modes is handled in
+                    // output_z_score below, which is what keeps the next query's phase 1 safe.
+                    if (mode == MODE_CLASSIFY) begin
+                        count_reg      <= global_count;
+                        sum_reg        <= global_sum;
+                        sum_square_reg <= global_sum_square;
+                        state          <= compute_wait;
+                        wait_cnt       <= '0;
+                        draining       <= 1'b0;
+                    end
+
                     // pass 1 ends at tlast: stop accepting, then drain the pipe
                     if (in.tvalid && in.tready && in.tlast) draining <= 1'b1;
 
-                    // last beat fully accumulated -> compute the threshold
+                    // last beat fully accumulated -> STATS hands the partials back to the host,
+                    // LEGACY carries straight on into the threshold + pass 2 for this same stream.
                     if (c_valid && c_last) begin
-                        state    <= compute_wait;
+                        state    <= (mode == MODE_STATS) ? output_stats : compute_wait;
                         wait_cnt <= '0;
                         draining <= 1'b0;
                         a_valid  <= 1'b0;
@@ -292,9 +345,43 @@ module my_z_score_squared
                         end
                     end
 
+                    // The host switched away from CLASSIFY between queries (phase 2 of one query
+                    // ends, phase 1 of the next begins). Leave the armed state while the pipe is
+                    // idle, so the next query's statistics pass is ACCUMULATED rather than
+                    // classified against the previous query's totals.
+                    if (mode != MODE_CLASSIFY && !out.tvalid && !in.tvalid) begin
+                        state <= accumulate;
+                    end
+
                     // end of stream: last output beat delivered -> reset & restart
                     if (out.tvalid && out.tready && out.tlast) begin
                         out.tvalid     <= 1'b0;
+                        sum_reg        <= '0;
+                        sum_square_reg <= '0;
+                        count_reg      <= '0;
+                        threshold_reg  <= '0;
+                        a_valid <= 1'b0; b_valid <= 1'b0; c_valid <= 1'b0;
+                        draining       <= 1'b0;
+                        for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
+                        for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
+                        state          <= accumulate;
+                    end
+                end
+
+                // ---- STATS mode tail: hand this stream's partial statistics to the host ----------
+                // Entered one cycle after the final accumulate, so sum/sum_square/count are settled
+                // and stats_beat carries the totals for the whole row group.
+                output_stats: begin
+                    if (!out.tvalid) begin
+                        out.tvalid <= 1'b1;
+                        out.tdata  <= stats_beat;
+                        out.tkeep  <= '1;
+                        out.tlast  <= 1'b1;
+                    end else if (out.tready) begin
+                        // Beat accepted -> reset exactly like the end of a legacy stream, so the
+                        // next row group starts from zero.
+                        out.tvalid     <= 1'b0;
+                        out.tlast      <= 1'b0;
                         sum_reg        <= '0;
                         sum_square_reg <= '0;
                         count_reg      <= '0;

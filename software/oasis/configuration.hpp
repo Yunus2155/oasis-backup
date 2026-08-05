@@ -28,6 +28,14 @@ constexpr const uint32_t ZSCORE_PROFILE_PROFILE_REGS = 8;
 // common.sv.
 constexpr const uint32_t ZSCORE_PROFILE_AGG_REGS     = 3;
 
+// ZScoreStatsConfig: whole-column (global) z-score control. Write registers are
+// [0]=mode, [1]=count, [2]=sum, [3]=sum_square. MUST match hardware/src/hdl/common.sv.
+constexpr const uint64_t ZSCORE_STATS_CONFIG_ID = 0x5d3f8a1c60b7e924;
+constexpr const uint32_t ZSCORE_STATS_MODE_REG       = 0;
+constexpr const uint32_t ZSCORE_STATS_COUNT_REG      = 1;
+constexpr const uint32_t ZSCORE_STATS_SUM_REG        = 2;
+constexpr const uint32_t ZSCORE_STATS_SUM_SQUARE_REG = 3;
+
 /**
  * Configues a hardware read request module to fetch data.
  */
@@ -111,6 +119,55 @@ class ZScoreProfileConfig : public libstf::Config {
 
   private:
     libstf::stream_t num_zscores_;
+};
+
+/**
+ * Control for the whole-column ("global") z-score.
+ *
+ * The hardware sees one parquet row group per stream -- tlast arrives at the end of each column
+ * chunk, and that is what ends pass 1 -- so a single stream can only ever normalise a row group on
+ * itself. Because count, sum and sum-of-squares are additive, the host works around this in two
+ * phases: run every row group in STATS mode (pass 1 only, one beat of partial statistics comes back
+ * per group), add the partials up, write the totals here, then re-run every row group in CLASSIFY
+ * mode, which skips pass 1 and compares against those totals.
+ *
+ * LEGACY reproduces the original per-row-group behaviour and is the reset default, so an
+ * unconfigured bitstream is unchanged.
+ */
+class ZScoreStatsConfig : public libstf::Config {
+  public:
+    ZScoreStatsConfig(std::shared_ptr<coyote::cThread> cthread, uint32_t addr_offset,
+                      uint32_t num_regs);
+
+    enum class Mode : uint64_t {
+        Legacy   = 0, // per-stream 2-pass: each row group normalised on itself
+        Stats    = 1, // pass 1 only; one beat of (count, sum, sum_square) per stream
+        Classify = 2, // skip pass 1; classify against the totals written below
+    };
+
+    /** The partial statistics one STATS-mode stream returns, and the running total of them. */
+    struct Statistics {
+        uint64_t count      = 0;
+        int64_t  sum        = 0;
+        int64_t  sum_square = 0;
+    };
+
+    /**
+     * Selects the operator mode. Must not be changed while a stream is in flight -- the host is
+     * expected to drain phase 1 completely before switching to Classify.
+     */
+    void set_mode(Mode mode);
+
+    /**
+     * Publishes the whole-column totals every lane classifies against. Write these before
+     * set_mode(Classify); all lanes read the same values.
+     */
+    void set_global_statistics(const Statistics &stats);
+
+    /** Reads back the currently selected mode (register 1 of the read file). */
+    Mode mode();
+
+    static constexpr uint64_t ID = ZSCORE_STATS_CONFIG_ID;
 };
 
 } // namespace oasis

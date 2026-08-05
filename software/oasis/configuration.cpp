@@ -74,4 +74,26 @@ std::vector<std::pair<uint32_t, uint64_t>> ZScoreProfileConfig::read_raw_range(u
 
 const libstf::stream_t ZScoreProfileConfig::num_zscores() const { return num_zscores_; }
 
+ZScoreStatsConfig::ZScoreStatsConfig(std::shared_ptr<coyote::cThread> cthread, uint32_t addr_offset,
+                                     uint32_t num_regs)
+    : Config(cthread, addr_offset, num_regs) {}
+
+void ZScoreStatsConfig::set_mode(Mode mode) {
+    write_register(libstf::ConfigRegister(ZSCORE_STATS_MODE_REG, static_cast<uint64_t>(mode)));
+}
+
+void ZScoreStatsConfig::set_global_statistics(const Statistics &stats) {
+    // Written before the mode switch, so a lane can never latch a half-updated set: nothing is in
+    // flight while these land, and CLASSIFY only samples them when a stream starts.
+    write_register(libstf::ConfigRegister(ZSCORE_STATS_COUNT_REG, stats.count));
+    write_register(
+        libstf::ConfigRegister(ZSCORE_STATS_SUM_REG, static_cast<uint64_t>(stats.sum)));
+    write_register(
+        libstf::ConfigRegister(ZSCORE_STATS_SUM_SQUARE_REG, static_cast<uint64_t>(stats.sum_square)));
+}
+
+ZScoreStatsConfig::Mode ZScoreStatsConfig::mode() {
+    return static_cast<Mode>(read_register(1).value());
+}
+
 } // namespace oasis

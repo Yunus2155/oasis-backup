@@ -42,11 +42,17 @@ localparam MEM_CONFIG_NUM_REGS = (NUM_STREAMS + 1 > 3) ? NUM_STREAMS + 1 : 3;
 // [4]=card buffer only exists with EN_MEM: it hands the decode-once replay its host-allocated HBM
 // scratch buffer. GlobalConfig's ADDR_SPACE_SIZES must list exactly NUM_CONFIGS entries, so the slot
 // is added and removed together with the `ifdef below.
+// The z-score stats slot is appended LAST so every existing slot keeps its address range -- the
+// egress aggregate counter's readout order workaround depends on where those registers sit.
 `ifdef EN_MEM
-localparam NUM_CONFIGS   = 5;   // [0]=mem, [1]=decoder, [2]=read-req, [3]=z-score profile, [4]=card buffer
+localparam NUM_CONFIGS   = 6;   // [0]=mem, [1]=decoder, [2]=read-req, [3]=z-score profile, [4]=card buffer, [5]=z-score stats
 `else
-localparam NUM_CONFIGS   = 4;   // [0]=mem, [1]=decoder, [2]=read-req, [3]=z-score profile
+localparam NUM_CONFIGS   = 5;   // [0]=mem, [1]=decoder, [2]=read-req, [3]=z-score profile, [4]=z-score stats
 `endif
+
+// ZScoreStatsConfig needs 4 write registers (mode, count, sum, sum_square) and 2 read.
+localparam ZSCORE_STATS_NUM_REGS =
+    (ZSCORE_STATS_WRITE_REGS > ZSCORE_STATS_READ_REGS) ? ZSCORE_STATS_WRITE_REGS : ZSCORE_STATS_READ_REGS;
 `ifdef EN_RDMA
 localparam NUM_DECODERS  = NUM_STREAMS - 1;
 `else
@@ -81,6 +87,12 @@ decoder_profile_i                    zscore_profiles [NUM_ZSCORE_PROFILES]();
 // Link-level egress counters -- driven at the bottom of this file, read out via ZScoreProfileConfig.
 logic [31:0]                         egress_agg_beats, egress_agg_stalled, egress_agg_window;
 logic                                egress_agg_stop;
+// Global-z-score control, driven by ZScoreStatsConfig and broadcast to every z-score lane.
+logic [1:0]                          zscore_mode;
+logic [31:0]                         zscore_global_count;
+logic signed [63:0]                  zscore_global_sum;
+logic signed [63:0]                  zscore_global_sum_square;
+logic                                zscore_mode_valid;
 `ifdef EN_MEM
 mem_config_i                         card_mem_conf[NUM_DECODERS](.*);
 `endif
@@ -96,6 +108,7 @@ GlobalConfig #(
 `ifdef EN_MEM
         , CARD_BUFFER_CONFIG_NUM_REGS
 `endif
+        , ZSCORE_STATS_NUM_REGS
     })
 ) inst_config (
     .clk(clk),
@@ -162,6 +175,24 @@ ZScoreProfileConfig #(
     .agg_stalled({32'b0, egress_agg_stalled}),
     .agg_window ({32'b0, egress_agg_window}),
     .agg_stop   (egress_agg_stop)
+);
+
+// Global (whole-column) z-score control. Sits in the LAST config slot so it does not shift any
+// existing slot's address range. See the ZScoreStatsConfig comment in common.sv for the two-phase
+// scheme; on a bitstream nobody configures, mode resets to LEGACY and the operator behaves exactly
+// as before.
+ZScoreStatsConfig inst_zscore_stats_config (
+    .clk(clk),
+    .rst_n(rst_n),
+
+    .write_config(write_configs[NUM_CONFIGS - 1]),
+    .read_config (read_configs [NUM_CONFIGS - 1]),
+
+    .mode             (zscore_mode),
+    .mode_valid       (zscore_mode_valid),
+    .global_count     (zscore_global_count),
+    .global_sum       (zscore_global_sum),
+    .global_sum_square(zscore_global_sum_square)
 );
 
 `ifdef EN_MEM
@@ -460,7 +491,14 @@ for (genvar I = 0; I < NUM_DECODERS; I++) begin
         .in(axi_zin),
         .out(axi_zout),
 
-        .profile(zscore_profiles[I])
+        .profile(zscore_profiles[I]),
+
+        // Global-z-score control, broadcast identically to every lane (see ZScoreStatsConfig).
+        .mode(zscore_mode),
+        .mode_valid(zscore_mode_valid),
+        .global_count(zscore_global_count),
+        .global_sum(zscore_global_sum),
+        .global_sum_square(zscore_global_sum_square)
     );
 
     // Pipeline the z-score -> OutputWriter crossing. StreamWriter's inst_len_fifo/s_full_reg feeds
@@ -498,7 +536,14 @@ for (genvar I = 0; I < NUM_DECODERS; I++) begin
         .in(axi_decoded),
         .out(axi_zout),
 
-        .profile(zscore_profiles[I])
+        .profile(zscore_profiles[I]),
+
+        // Global-z-score control, broadcast identically to every lane (see ZScoreStatsConfig).
+        .mode(zscore_mode),
+        .mode_valid(zscore_mode_valid),
+        .global_count(zscore_global_count),
+        .global_sum(zscore_global_sum),
+        .global_sum_square(zscore_global_sum_square)
     );
 
     // Same z-score -> OutputWriter backpressure crossing as the EN_MEM branch above.
