@@ -30,7 +30,8 @@ namespace {
 
 using libstf::Profiler;
 
-bool PerGroupMode(); // T2 diagnostic, defined below
+bool PerGroupMode();   // T2 diagnostic, defined below
+bool DoubleDecodeMode(); // short-flow discriminator, defined below
 
 // Caliper region names (mirrors parcore's "ns::Class::" convention). Built ONCE at file scope:
 // open_regions/close_regions take a const&, so passing these costs nothing per call. Building them
@@ -90,6 +91,10 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 struct InFlightZGroup {
 	oasis::SplinterResultHandle handle;
 	size_t num_values = 0;
+	// Flag values this flow is expected to produce. Equal to num_values, except under the
+	// OASIS_ZSCORE_DOUBLE_DECODE diagnostic (see SubmitGroup), where the flow feeds the column twice
+	// and therefore emits twice as many flags -- only the first num_values of which are read.
+	size_t expected_values = 0;
 	int64_t first_row = 0; // global row index of this group's first value
 };
 
@@ -328,6 +333,15 @@ unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, Ta
 
 	auto stats_config = gstate->ctx->config<oasis::ZScoreStatsConfig>();
 	oasis::ZScoreStatsConfig::Statistics totals;
+
+	// Leave CLASSIFY *before* publishing new totals. The operator reloads count/sum/sum_square from
+	// these registers only when it re-arms, and it re-arms on the CLASSIFY edge -- so if the mode is
+	// already CLASSIFY when the totals change, the first row group of this query is classified
+	// against the PREVIOUS query's statistics. The phase-1 path below writes Stats anyway; this
+	// makes the transition unconditional so the supplied-statistics path gets it too. Measured in
+	// hardware/unit-tests/z_score_boundary_tb.sv (SCEN=6): without it, exactly one stream is wrong.
+	stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Stats);
+
 	if (const char *supplied = std::getenv("OASIS_ZSCORE_STATS")) {
 		// Diagnostic: skip phase 1 and compute the whole-column statistics on the CPU, so phase 2
 		// runs on its own. Splits the global path in two -- if the short-flow loss survives this it
@@ -335,7 +349,6 @@ unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, Ta
 		// between the phases. The results are identical either way, so correctness still applies.
 		totals = ParseSuppliedStatistics(supplied);
 	} else {
-		stats_config->set_mode(oasis::ZScoreStatsConfig::Mode::Stats);
 		totals = ComputeGlobalStatistics(context, *gstate->ctx, bind);
 	}
 
@@ -379,8 +392,11 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 			continue; // Skip empty row groups.
 		}
 
-		// The flag output (one int32 per value) must fit in a single FPGA output buffer.
-		const size_t flag_size = cc.num_values * sizeof(int32_t);
+		// The flag output (one int32 per value) must fit in a single FPGA output buffer. The
+		// double-decode diagnostic feeds the column twice and CLASSIFY re-arms after the first
+		// tlast, so that flow emits a full set of flags per pass.
+		const size_t passes = DoubleDecodeMode() && !PerGroupMode() ? 2 : 1;
+		const size_t flag_size = cc.num_values * passes * sizeof(int32_t);
 		if (flag_size > libstf::MAXIMUM_OUTPUT_WRITER_BUFFER_SIZE) {
 			throw NotImplementedException(
 			    "Row group %llu produces %llu flag bytes, exceeding the %llu byte maximum output buffer size",
@@ -413,8 +429,9 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 		oasis::OperatorFlow flow;
 		flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
 		flow.push_back(std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
-		if (PerGroupMode()) {
+		if (PerGroupMode() || DoubleDecodeMode()) {
 			// LEGACY needs the column twice: pass 1 accumulates this group's stats, pass 2 classifies.
+			// In CLASSIFY the second pair is redundant work (see DoubleDecodeMode).
 			flow.push_back(std::make_unique<oasis::LocalSourceOperator>(input_buf));
 			flow.push_back(
 			    std::make_unique<oasis::DecodeColumnChunkOperator>(cc.compression, cc.num_values, type));
@@ -426,7 +443,11 @@ std::optional<InFlightZGroup> SubmitGroup(oasis::OasisContext &ctx, ZScoreGlobal
 		splinter.streams.push_back(std::move(flow));
 		Profiler::close_regions(kBuildFlow);
 
-		return InFlightZGroup{ctx.scheduler().submit(std::move(splinter)), cc.num_values,
+		// MEASURED 2026-08-05: with a second source+decode the flow still returns exactly ONE set of
+		// flags (491520 of a doubled 983040 bytes) -- the sink closes on the first tlast and the
+		// second pass's output goes nowhere. The extra decode still costs its time, which is the
+		// point of the experiment, so the guard expects one set.
+		return InFlightZGroup{ctx.scheduler().submit(std::move(splinter)), cc.num_values, cc.num_values,
 		                      bind.group_first_row[group]};
 	}
 }
@@ -454,6 +475,21 @@ void FillWindow(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLocal
 // group z-scores by construction, so only the SHORT-flow count is meaningful in this mode.
 bool PerGroupMode() {
 	static const bool on = std::getenv("OASIS_ZSCORE_PER_GROUP") != nullptr;
+	return on;
+}
+
+// Short-flow discriminator: OASIS_ZSCORE_DOUBLE_DECODE=1 gives every CLASSIFY flow a SECOND,
+// redundant source+decode pair. Only two things separate a phase-2 flow from a (clean) per-group
+// flow: it carries half the decode work, so flows complete twice as fast, and it arms CLASSIFY.
+// Doubling the decode work halves the flow-completion rate while leaving the arming rate alone --
+// the operator resets on each tlast and re-arms from the config registers, so it still arms once
+// per stream, i.e. twice per flow.
+//   loss disappears -> the trigger is the flow-completion / interrupt rate
+//   loss persists    -> the trigger is CLASSIFY arming itself
+// The extra pass classifies the same values against the same totals, so the flow emits 2x the
+// flags; the buffer is sized for both and only the first num_values are read.
+bool DoubleDecodeMode() {
+	static const bool on = std::getenv("OASIS_ZSCORE_DOUBLE_DECODE") != nullptr;
 	return on;
 }
 
@@ -494,7 +530,7 @@ bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLo
 	// Collect every buffer this flow produced until the group's flags are complete. One interrupt is
 	// raised per completed buffer, so a group can arrive in several pieces; taking only the first
 	// one silently reads unwritten memory past its end.
-	const size_t expected = group.num_values * sizeof(int32_t);
+	const size_t expected = group.expected_values * sizeof(int32_t);
 	size_t collected = batch->buffer->size;
 	lstate.pending_batches.clear();
 	lstate.pending_batches.push_back(std::move(batch->buffer));
@@ -523,7 +559,9 @@ bool LoadNextGroup(oasis::OasisContext &ctx, ZScoreGlobalState &gstate, ZScoreLo
 		                        (unsigned long long)collected, (unsigned long long)expected);
 	}
 	// A short flow leaves the tail of the group unread; clamp so we never read past what arrived.
-	lstate.short_by = (expected - collected) / sizeof(int32_t);
+	// Under DoubleDecodeMode the shortfall is measured against both passes, so it can exceed the
+	// group -- the emitted part is capped at num_values below either way.
+	lstate.short_by = std::min((expected - collected) / sizeof(int32_t), group.num_values);
 
 	// OASIS_ZSCORE_IGNORE_SHORT=1 reads the group in FULL even when the completion reported fewer
 	// bytes. This separates two very different failures: if the results are still exactly right, the
@@ -581,7 +619,8 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 			const auto *flags = reinterpret_cast<const int32_t *>(lstate.current_flags->ptr);
 			Profiler::open_regions(kEmit);
 			// Bounded by what is left in THIS buffer as well as by the group and the output vector.
-			while (lstate.current_flags_values > 0 && n < STANDARD_VECTOR_SIZE) {
+			while (lstate.current_flags_values > 0 && lstate.current_remaining > 0 &&
+			       n < STANDARD_VECTOR_SIZE) {
 				if (flags[lstate.current_flags_pos] != 0) {
 					out[n++] = lstate.current_first_row + (int64_t)lstate.current_offset;
 				}
@@ -593,6 +632,7 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 			Profiler::close_regions(kEmit);
 			if (lstate.current_remaining == 0) {
 				lstate.current_flags = nullptr; // release; next iteration loads the next group
+				lstate.current_flags_values = 0; // drop any unread tail (double-decode's 2nd pass)
 			}
 		}
 
@@ -611,7 +651,8 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 
 	AdvanceFlagBuffer(lstate);
 	// Never read past the current buffer: a row group can span several of them.
-	const size_t emit = std::min<size_t>(lstate.current_flags_values, STANDARD_VECTOR_SIZE);
+	const size_t emit =
+	    std::min<size_t>({lstate.current_flags_values, lstate.current_remaining, STANDARD_VECTOR_SIZE});
 
 	auto &vec = output.data[0];
 	vec.SetVectorType(VectorType::FLAT_VECTOR);
@@ -631,6 +672,7 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	lstate.current_remaining -= emit;
 	if (lstate.current_remaining == 0) {
 		lstate.current_flags = nullptr; // Release the flag buffer; next call loads the next group.
+		lstate.current_flags_values = 0; // drop any unread tail (double-decode's 2nd pass)
 	}
 	Profiler::close_regions(kFunction);
 }

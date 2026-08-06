@@ -91,7 +91,11 @@ module my_z_score_squared
     logic signed [63:0]  c_bsm;
     logic        [4:0]   c_cnt;
     logic                c_valid, c_last;
-    logic                draining;                  // pass-1 done; flushing the accumulate pipe
+    logic                draining;                  // pass done; flushing the pipe, input closed
+    // High while this visit to output_z_score was entered by the CLASSIFY load rather than by a
+    // LEGACY pass 1. Used only to gate the "host switched away from CLASSIFY" exit below, which
+    // must not fire during a LEGACY pass 2 (there `mode` is also != MODE_CLASSIFY).
+    logic                classify_run;
 
     // ---- pass-2 stage 0: input buffer (registers in.tdata so the decoder->z-score crossing is
     //      register-to-register with no logic in it) ----
@@ -163,8 +167,14 @@ module my_z_score_squared
     // tready: pass 1 ready until the pipe is draining; pass 2 ready when it can advance.
     // In CLASSIFY mode there is no pass 1, so `accumulate` must not swallow beats -- it is only a
     // one-cycle staging state that loads the host-supplied totals and jumps to the threshold compute.
+    // `draining` closes the input in BOTH passes. Pass 2 needs it for the same reason pass 1 does:
+    // the last beat of a stream is only at the head of a PASS2_LAT-deep pipeline, and for the
+    // PASS2_LAT+1 cycles it takes to reach the output the input would otherwise still be accepting
+    // -- so the next stream's first beats get consumed and are then wiped by the end-of-stream
+    // reset below. On hardware that is the "SHORT flow" beat loss: whole 64-byte beats missing from
+    // the HEAD of the next row group, up to the pipeline depth.
     assign in.tready = (state == accumulate)     ? (!draining && mode_valid && mode != MODE_CLASSIFY) :
-                       (state == output_z_score) ? pipe_adv  :
+                       (state == output_z_score) ? (pipe_adv && !draining) :
                                                    1'b0;
 
     // The STATS-mode result beat: count, sum and sum_square as three 64-bit little-endian words in
@@ -186,6 +196,7 @@ module my_z_score_squared
             a_valid <= 1'b0; b_valid <= 1'b0; c_valid <= 1'b0;
             a_last  <= 1'b0; b_last  <= 1'b0; c_last  <= 1'b0;
             draining        <= 1'b0;
+            classify_run    <= 1'b0;
             for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
             for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
             out.tvalid      <= 1'b0;
@@ -274,6 +285,7 @@ module my_z_score_squared
                         state          <= compute_wait;
                         wait_cnt       <= '0;
                         draining       <= 1'b0;
+                        classify_run   <= 1'b1;
                     end
 
                     // pass 1 ends at tlast: stop accepting, then drain the pipe
@@ -345,16 +357,40 @@ module my_z_score_squared
                         end
                     end
 
+                    // pass 2 ends at tlast: stop accepting, then let the pipe drain. Without this the
+                    // next stream's head is consumed during the drain and destroyed by the reset
+                    // below -- which is the "SHORT flow" beat loss seen on hardware.
+                    if (in.tvalid && in.tready && in.tlast) draining <= 1'b1;
+
                     // The host switched away from CLASSIFY between queries (phase 2 of one query
                     // ends, phase 1 of the next begins). Leave the armed state while the pipe is
                     // idle, so the next query's statistics pass is ACCUMULATED rather than
-                    // classified against the previous query's totals.
-                    if (mode != MODE_CLASSIFY && !out.tvalid && !in.tvalid) begin
-                        state <= accumulate;
+                    // classified against the previous query's totals. Gated on classify_run: in
+                    // LEGACY `mode` is also != MODE_CLASSIFY, and this state is then a pass 2 in
+                    // progress -- leaving it on an input bubble would abandon the stream and the
+                    // flow would never see its tlast.
+                    if (classify_run && mode != MODE_CLASSIFY && !out.tvalid && !in.tvalid) begin
+                        classify_run   <= 1'b0;
+                        sum_reg        <= '0;
+                        sum_square_reg <= '0;
+                        count_reg      <= '0;
+                        threshold_reg  <= '0;
+                        draining       <= 1'b0;
+                        for (k = 0; k <= PASS2_LAT; k++) meta_valid[k] <= 1'b0;
+                        for (k = 0; k < SQ_LAT; k++) begin sqvalid_reg[k] <= 1'b0; sqlast_reg[k] <= 1'b0; end
+                        state          <= accumulate;
                     end
 
-                    // end of stream: last output beat delivered -> reset & restart
+                    // end of stream: last output beat delivered -> reset & restart. This runs in
+                    // CLASSIFY too, on purpose: re-arming per stream is what makes the operator
+                    // reload count/sum/sum_square from the config registers for every row group. If
+                    // it stayed armed instead, a second query that publishes NEW totals and writes
+                    // CLASSIFY again WITHOUT an intervening STATS write would be classified against
+                    // the previous query's statistics -- silently wrong. (That is the phase-1-bypass
+                    // path, OASIS_ZSCORE_STATS.) The re-arm costs ~22 idle cycles plus the
+                    // PASS2_LAT drain per row group, under 1% of a 7680-beat group.
                     if (out.tvalid && out.tready && out.tlast) begin
+                        classify_run   <= 1'b0;
                         out.tvalid     <= 1'b0;
                         sum_reg        <= '0;
                         sum_square_reg <= '0;

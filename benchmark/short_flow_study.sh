@@ -47,7 +47,7 @@ for f in $FILES; do
 	[[ -f "$path" ]] || { echo "missing $path, skipping" >&2; continue; }
 
 	for t in $THREADS; do
-		for mode in clamp ignore; do
+		for mode in ${MODES:-clamp ignore}; do
 			if [[ $mode == clamp ]]; then
 				env_var="OASIS_ZSCORE_TOLERATE_SHORT=1"
 			else
