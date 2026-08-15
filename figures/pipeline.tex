@@ -1,0 +1,55 @@
+% End-to-end pipeline figure.
+% Standalone:  pdflatex pipeline.tex
+% In a paper:  copy everything between \begin{tikzpicture} ... \end{tikzpicture}
+%              into a figure environment, and keep the \usetikzlibrary lines.
+\documentclass[border=6pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm,
+  box/.style={
+    draw, rounded corners=2pt, thick,
+    align=center, inner sep=4pt,
+    minimum height=13mm, text width=25mm},
+  host/.style ={box, fill=gray!12},
+  fpga/.style ={box, fill=blue!10},
+  cfg/.style  ={box, fill=orange!14, text width=30mm, minimum height=9mm},
+  flow/.style ={-{Stealth[length=2.5mm]}, thick},
+  cfgflow/.style={-{Stealth[length=2.5mm]}, thick, dashed, orange!70!black},
+  lbl/.style  ={font=\scriptsize\itshape, inner sep=1.5pt},
+  grp/.style  ={draw, dashed, rounded corners=3pt, inner sep=7pt}
+]
+
+% ---------- data path ----------
+\node[host] (db)  {\textbf{DuckDB}\\[1pt]\scriptsize \texttt{zscore()} table func\\ windowed submit};
+\node[fpga, right=8mm of db]  (in)  {\textbf{PCIe DMA}\\[1pt]\scriptsize host $\rightarrow$ card\\ AXI4-Stream};
+\node[fpga, right=of in]      (dec) {\textbf{Column-chunk}\\\textbf{decoder}\\[1pt]\scriptsize RLE / bit-pack\\ $N$ lanes};
+\node[fpga, right=of dec]     (op)  {\textbf{Statistical}\\\textbf{operator}\\[1pt]\scriptsize P1: $\Sigma x,\Sigma x^2, n$\\ P2: classify};
+\node[fpga, right=of op]      (ow)  {\textbf{Output}\\\textbf{writer}\\[1pt]\scriptsize 1 int32 flag\\ per value};
+\node[host, right=8mm of ow]  (fin) {\textbf{Host}\\[1pt]\scriptsize two-phase finalize\\ outlier ids only};
+
+\draw[flow] (db)  -- (in);
+\draw[flow] (in)  -- node[lbl, above]{pages} (dec);
+\draw[flow] (dec) -- node[lbl, above]{INT32} (op);
+\draw[flow] (op)  -- node[lbl, above]{4\,B/row} (ow);
+\draw[flow] (ow)  -- (fin);
+
+% 2-pass feedback
+\draw[flow] ($(op.south)+(0,0)$) -- ++(0,-7mm) -| node[lbl, below, pos=0.25]{pass 2 replay} ($(in.south)+(0,0)$);
+
+% ---------- config path ----------
+\node[cfg, above=9mm of op] (cfg) {\textbf{Config / CSR}\\[1pt]\scriptsize mode, stride, $\mu$/$\sigma$ writeback};
+\draw[cfgflow] (db.north) |- (cfg.west);
+\draw[cfgflow] (cfg.south) -- (op.north);
+\draw[cfgflow] (cfg.west) -| (dec.north);
+
+% ---------- groupings ----------
+\begin{scope}[on background layer]
+  \node[grp, fit=(in)(dec)(op)(ow), label={[font=\scriptsize\bfseries]below:Alveo U55C --- Coyote shell}] {};
+\end{scope}
+
+\end{tikzpicture}
+\end{document}

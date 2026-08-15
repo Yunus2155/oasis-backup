@@ -1,0 +1,1 @@
+2 x decoder + zscore + egress profiler + aggregate PCIe counter (trying to optimize timing)

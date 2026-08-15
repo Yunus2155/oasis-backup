@@ -64,6 +64,13 @@ struct ZScoreBindData : public TableFunctionData {
 	std::vector<int64_t> group_first_row;
 };
 
+// OASIS_ZSCORE_TIMING=1 prints one line per query with the operator's own wall time, split at the
+// statistics barrier. Read once: a getenv per chunk would cost more than the thing being timed.
+bool TimingEnabled() {
+	static const bool on = std::getenv("OASIS_ZSCORE_TIMING") != nullptr;
+	return on;
+}
+
 // Shared across workers. The only mutable shared state is the row-group cursor (claimed atomically),
 // mirroring read_oasis. Capped to one worker for now -- this is the first hardware bring-up of the
 // z-score path, so we keep it single-threaded and deterministic.
@@ -87,7 +94,45 @@ struct ZScoreGlobalState : public GlobalTableFunctionState {
 		}
 		return 4;
 	}
+
+	// --- OASIS_ZSCORE_TIMING ----------------------------------------------------------------
+	// heavy = phase 1 (the statistics barrier in ZScoreInitGlobal) + phase 2 (this scan). It is
+	// stamped when a worker's scan terminates, NOT at teardown, so unmapping the hugepage buffers
+	// is not charged to the operator. Every worker terminates exactly once, so this costs a handful
+	// of clock reads per query rather than one per chunk. Workers race on last_ns, but they finish
+	// within microseconds of each other and the line reports ms, so a plain store is enough.
+	std::chrono::steady_clock::time_point start {};
+	double phase1_ms = 0.0;
+	std::atomic<int64_t> last_ns {0};
+	size_t rows = 0;
+	size_t threads = 0;
+
+	~ZScoreGlobalState() {
+		if (!TimingEnabled()) {
+			return;
+		}
+		const int64_t last = last_ns.load();
+		// PHASE1_ONLY emits nothing, so no worker ever stamps: the operator's time IS phase 1.
+		const double heavy_ms = last > 0 ? last / 1e6 : phase1_ms;
+		fprintf(stderr,
+		        "[zscore] heavy %.2f ms  phase1 %.2f ms  phase2 %.2f ms  groups %llu  threads %llu  "
+		        "rows %llu\n",
+		        heavy_ms, phase1_ms, heavy_ms - phase1_ms, (unsigned long long)total_groups,
+		        (unsigned long long)threads, (unsigned long long)rows);
+	}
 };
+
+// Stamp the moment this worker's scan ended. The last stamp wins, so the destructor reports the
+// operator's time to the final chunk instead of to state teardown.
+void StampProgress(ZScoreGlobalState &gstate) {
+	if (!TimingEnabled()) {
+		return;
+	}
+	gstate.last_ns.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+	                         std::chrono::steady_clock::now() - gstate.start)
+	                         .count(),
+	                     std::memory_order_relaxed);
+}
 
 // One row group submitted to the FPGA and awaiting its flags. This is phase 2 (CLASSIFY), so the flow
 // is a single pass over the group; the scheduler keeps the input buffer mapped until it completes and
@@ -496,8 +541,13 @@ oasis::ZScoreStatsConfig::Statistics ComputeGlobalStatistics(ClientContext &cont
 unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
 	auto &bind = input.bind_data->Cast<ZScoreBindData>();
 	auto gstate = make_uniq<ZScoreGlobalState>();
+	gstate->start = std::chrono::steady_clock::now();
 	gstate->ctx = &GetOrCreateOasisContext(context);
 	gstate->total_groups = bind.metadata.groups.size();
+	gstate->threads = (size_t)gstate->MaxThreads();
+	for (const auto &group : bind.metadata.groups) {
+		gstate->rows += group.chunks[bind.column_id].num_values;
+	}
 
 	// Phase 1 -> totals -> phase 2. The mode switch is only safe because nothing is in flight: the
 	// stats pass is fully drained before the totals are published, and no scan thread has started.
@@ -535,6 +585,12 @@ unique_ptr<GlobalTableFunctionState> ZScoreInitGlobal(ClientContext &context, Ta
 	} else {
 		totals = ComputeGlobalStatistics(context, *gstate->ctx, bind);
 	}
+
+	// Everything above is phase 1: it runs before any scan thread exists, so the barrier ends here.
+	gstate->phase1_ms = std::chrono::duration_cast<std::chrono::nanoseconds>(
+	                        std::chrono::steady_clock::now() - gstate->start)
+	                        .count() /
+	                    1e6;
 
 	// OASIS_ZSCORE_DEBUG_STATS=1 prints the totals phase 1 assembled, so they can be diffed against
 	// the exact values computed on the CPU. A mismatch localises a wrong result to phase 1
@@ -829,6 +885,9 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 		}
 
 		output.SetCardinality(n);
+		if (n == 0) {
+			StampProgress(gstate); // no row ids left anywhere: this worker's scan is over
+		}
 		Profiler::close_regions(kFunction);
 		return;
 	}
@@ -836,6 +895,7 @@ void ZScoreFunction(ClientContext &, TableFunctionInput &data_p, DataChunk &outp
 	if (lstate.current_remaining == 0) {
 		if (!LoadNextGroup(ctx, gstate, lstate, bind)) {
 			output.SetCardinality(0);
+			StampProgress(gstate); // all row groups consumed: this worker's scan is over
 			Profiler::close_regions(kFunction);
 			return;
 		}

@@ -1,3 +1,8 @@
+> 🚨 **Cluster wiped? Read [`RECOVERY.md`](RECOVERY.md) first.** It lists the two backup repos, the
+> exact clone commands, and what is not in git. Then follow [`patches/RESTORE.md`](patches/RESTORE.md)
+> to verify the submodule pins and apply the Vivado placer patch. `origin` is **read-only**; push to
+> the `backup` remote.
+
 # Oasis Learning Path — Beginner → Advanced
 
 Companion to `~/celeris/LEARNING_PATH.md`. Oasis is a **systems-integration** project rather than an
