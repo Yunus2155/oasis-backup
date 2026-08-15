@@ -1,1 +1,0 @@
-4 x decoder + zscore + egress profiler + (fixed bug) aggregate PCIe counter working GLOBAL with 2 bit flag
