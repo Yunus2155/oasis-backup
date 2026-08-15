@@ -38,6 +38,7 @@ WHAT DIFFERS FROM THE IQR HALF, and why:
 """
 import argparse
 import csv
+import math
 import os
 import re
 import signal
@@ -71,6 +72,22 @@ COUNT  = re.compile(r"^(\d+)$", re.M)     # bare result line (.mode csv + .heade
 
 def mean_last(xs, k=AVG_LAST):
     return sum(xs[-k:]) / len(xs[-k:]) if xs else float("nan")
+
+
+def linfit(xs, ys):
+    """Least-squares y = a + b*x, returning (a, b, rms). Written out rather than pulled from numpy,
+    which is not guaranteed on the run node."""
+    n = len(xs)
+    if n < 2:
+        return (float("nan"),) * 3
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx == 0:
+        return (float("nan"),) * 3
+    b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+    a = my - b * mx
+    rms = (sum((y - (a + b * x)) ** 2 for x, y in zip(xs, ys)) / n) ** 0.5
+    return a, b, rms
 
 
 def median(xs):
@@ -358,14 +375,30 @@ def test_codec(args):
         show(f"{m['level']}/{m['enc_intent'][:4]}/{m['compression'][:4]}", r)
         out.append(r)
 
-    # THE INTERNAL CHECK. Within a level the four files provably hold the same numbers, so phase 2
-    # has identical work to do; all variation must live in the decode window. If phase 2 moves, the
-    # generator's digest gate is the first thing to re-check.
+    # THE INTERNAL CHECK, and why it is not the roadmap's.
+    #
+    # The roadmap's control is "second-pass time must be constant within a level, because the values
+    # are provably identical there, so all variation must live in the decode window". That does NOT
+    # transfer: its second pass streams already-decoded data, whereas OUR phase 2 re-reads and
+    # re-decodes the column (the global scheme's barrier means each phase is a full pass). So
+    # representation moves BOTH phases and the spreads below are the measurement, not a defect.
+    # The control that does hold is the generator's digest gate: the four files at a level provably
+    # carry the same numbers.
     for lv in sorted({r["level"] for r in out}):
+        p1 = [r["fpga_decode_ms"] for r in out if r["level"] == lv]
         p2 = [r["fpga_passes_ms"] for r in out if r["level"] == lv]
-        s = spread(p2)
-        verdict = "FLAT (as required)" if s < 0.10 else ">>> NOT FLAT -- the sweep is contaminated"
-        print(f"  level {lv}: phase 2 spread {s*100:.1f}%  {verdict}")
+        print(f"  level {lv}: phase 1 spread {spread(p1)*100:.1f}%  "
+              f"phase 2 spread {spread(p2)*100:.1f}%  (both phases decode, so both move)")
+
+    # THE RESULT: operator time as a function of BYTE VOLUME alone, with no encoding or compression
+    # term. A small rms is the finding -- it says representation acts on this operator THROUGH bytes
+    # and through nothing else. Contrast the CPU arm, which pays for decode complexity instead and
+    # therefore does not follow bytes at all.
+    bpr = [float(r["bytes_per_row"]) for r in out]
+    for label, ys in (("fpga_op_ms", [r["fpga_op_ms"] for r in out]),
+                      ("cpu_op_ms ", [r["cpu_op_ms"] for r in out])):
+        a, b, rms = linfit(bpr, ys)
+        print(f"  {label} ~ {a:6.2f} + {b:5.2f} * bytes_per_row    rms {rms:.2f} ms")
     emit(args.csv, CODEC_COLS, out)
 
 
@@ -398,13 +431,42 @@ def test_thread(args):
         show(f"threads={t}", r)
         out.append(r)
 
-    # THE INTERNAL CHECK. Same file, same bytes, same encoding at every point, so the FPGA has
-    # identical work to do. If phase 2 moves with thread count the measurement is contaminated --
-    # most likely by DMA starvation at low thread counts, which is a real effect but a DIFFERENT
-    # one and must not be folded into a core-count-independence claim.
-    s = spread([r["fpga_passes_ms"] for r in out])
-    verdict = "FLAT (as required)" if s < 0.10 else ">>> NOT FLAT -- do not claim core independence"
-    print(f"  phase 2 spread across thread counts: {s*100:.1f}%  {verdict}")
+    # THE INTERNAL CHECK, adapted -- and the adaptation is itself a measured result.
+    #
+    # The roadmap checks that the SECOND PASS is flat across thread counts, on the grounds that the
+    # FPGA has identical work at every point. True for its host, which only orchestrates. Ours also
+    # FEEDS phase 2 from the scan threads, so phase 2 legitimately scales with them. That is
+    # measured, not assumed: a `--no-taskset` run (all 32 cores available, only PRAGMA threads
+    # varying) still moved phase 2 from 40.4 ms to 9.2 ms, so the cause is host feed depth, not core
+    # confinement. ==> WE CANNOT CLAIM CORE-COUNT INDEPENDENCE, and the honest statement is the
+    # saturation point instead: how few host threads the FPGA path needs to beat the CPU on 32.
+    #
+    # What IS a pure hardware-side quantity is PHASE 1: it runs inside ZScoreInitGlobal before any
+    # scan thread exists, so the pragma must not move it. Reported as a SLOPE per doubling rather
+    # than a spread, because with six points a peak-to-peak is dominated by whichever point was
+    # noisiest -- and a slope that flips sign between runs is the signature of no trend at all.
+    lg = [math.log2(r["threads"]) for r in out]
+    for label, ys in (("phase 1", [r["fpga_decode_ms"] for r in out]),
+                      ("phase 2", [r["fpga_passes_ms"] for r in out])):
+        a, b, _ = linfit(lg, ys)
+        mean = sum(ys) / len(ys)
+        pct = 100.0 * b / mean if mean else float("nan")
+        if label == "phase 1":
+            v = "FLAT (as required)" if abs(pct) < 5.0 else ">>> NOT FLAT -- phase 1 runs before any scan thread exists"
+        else:
+            v = "scales with the thread budget -- the FINDING, not a failure"
+        print(f"  {label}: {pct:+.1f}% per doubling of threads   {v}")
+
+    best = min(out, key=lambda r: r["fpga_op_ms"])
+    cpu32 = next((r for r in out if r["threads"] == 32), None)
+    if cpu32:
+        beats = [r for r in out if r["fpga_op_ms"] < cpu32["cpu_op_ms"]]
+        if beats:
+            r = min(beats, key=lambda r: r["threads"])
+            print(f"  the FPGA path passes the 32-thread CPU baseline ({cpu32['cpu_op_ms']:.1f} ms) "
+                  f"at {r['threads']} host thread(s): {r['fpga_op_ms']:.1f} ms "
+                  f"({cpu32['cpu_op_ms']/r['fpga_op_ms']:.2f}x). Fastest point: "
+                  f"{best['fpga_op_ms']:.1f} ms at {best['threads']} threads.")
     emit(args.csv, THREAD_COLS, out)
 
 

@@ -151,6 +151,140 @@ roadmap asks for in its §7.6.
 process and Coyote cannot reset user logic between host processes; recovery has needed a reboot.
 The harness uses SIGTERM first with a 60 s grace period, and SIGKILL only as a last resort.
 
+## Results — measured 2026-08-15, alveo-u55c-09, build-41, `~/duckdb-bench41`
+
+Every point of every test reported the exact expected flag count on **all** iterations.
+
+### Test 0 — real data, geometric mean **2.23×** (medians of 15, end-to-end)
+
+| dataset | rows | encoding | FPGA | SQL | speedup |
+|---|--:|---|--:|--:|--:|
+| taxi_d1 | 3.0M | PLAIN+PLAIN_DICT | 8.0 ms | 17.0 | 2.12× |
+| taxi_d2 | 6.0M | PLAIN_DICTIONARY | 10.0 | 20.0 | 2.00× |
+| taxi_d3 | 13.1M | PLAIN_DICTIONARY | 14.0 | 32.0 | 2.29× |
+| taxi_d4 | 20.3M | PLAIN_DICTIONARY | 18.0 | 44.0 | 2.44× |
+| tpch_qty_sf17 | 102M | PLAIN_DICTIONARY | 58.0 | 178.0 | **3.07×** |
+| tpch_extprice_sf17 | 102M | PLAIN | 99.0 | 167.0 | **1.69×** |
+
+**The roadmap's prediction for this table is inverted for us.** It expects `tpch_qty` (50 distinct)
+to be the weakest row, because its CPU baseline pays for distinct values. Ours is the *strongest*.
+Our ordering is set by **compression ratio**, not cardinality: qty is 5.3× compressed so ingress is
+nearly free, while extprice is PLAIN at 1.0× and must move 408 MB inbound. Same operator, different
+baseline, opposite ranking — worth one sentence in the paper.
+
+### Test 1 — size sweep, the advantage is in the SLOPE
+
+Fitted over the linear region (N ≥ 20M):
+
+```
+FPGA    4.75 ms + 0.873 ms/Mrow
+CPU    12.55 ms + 1.558 ms/Mrow      => asymptotic speedup 1.78x
+```
+
+Measured speedup falls 3.12× (1M) → 1.83× (100M) and then stops falling, exactly as the slope ratio
+predicts. At 100M the phase split is phase 1 = 54.5 ms, phase 2 = 37.6 ms: **the statistics barrier
+is 59% of operator time**, which is where an HBM decode-once would pay.
+
+### Test 4 — operator time is a function of BYTE VOLUME and nothing else
+
+Two independent runs of the same eight points:
+
+```
+run 1   fpga_op ~ 10.95 + 2.71 * B/row   rms 0.31 ms      cpu_op ~ 44.06 + 0.71 * B/row   rms 2.79
+run 2   fpga_op ~ 10.34 + 2.77 * B/row   rms 0.48 ms      cpu_op ~ 37.17 + 2.11 * B/row   rms 2.71
+```
+
+The FPGA slope reproduces to 2.2% with an rms of 1.4–2.2%; the CPU slope does **not** reproduce
+(0.71 vs 2.11) and its rms is 6–9× larger. So the FPGA arm follows bytes and the CPU arm follows
+decode complexity — visible directly in the rows, where the 2.22 B/row dictionary points cost the
+CPU *more* (46.0, 43.7 ms) than the 4.00 B/row PLAIN points (42.0, 44.7 ms).
+
+⭐ **Our byte slope, 2.71–2.77 ms per B/row, is the IQR half's 2.71 exactly** (its §5.7 fit). Same
+decoder, same per-byte price, measured independently on two operators. But its fit needs `[snappy]`
+and `[dict]` terms on top; ours needs neither — bytes/row alone explains the FPGA arm. That is the
+"shared decoder" claim landing about as hard as it can. (One coefficient agreeing could be chance;
+label it as a cross-check, not a derivation.)
+
+Speedup spans **1.86× – 2.93×** on the same 20 million numbers, so the methodology point holds:
+a speedup quoted without its encoding is meaningless.
+
+⚠️ **The Snappy arm is null here** — 80.02 MB → 79.92 MB, 0.1%. The roadmap gets 8.00 → 4.71 B/row
+because its columns are INT64 holding small values, i.e. four zero bytes per value that Snappy
+crushes. Ours are INT32 whose values span most of the word. State this: it is why our compression
+axis collapsed to an encoding axis, and it is a property of the *column type*, not of the codec.
+
+### Test 3 — ⚠️ the roadmap's core-independence claim does NOT reproduce
+
+| threads | FPGA | CPU | phase 1 | phase 2 | FPGA cpu-s | CPU cpu-s | offload |
+|--:|--:|--:|--:|--:|--:|--:|--:|
+| 1 | 63.3 | 1157.3 | 17.0 | 46.3 | 0.062 | 1.153 | **18.5×** |
+| 2 | 38.9 | 530.0 | 12.3 | 26.7 | 0.067 | 0.769 | 11.5× |
+| 4 | 30.2 | 249.3 | 13.6 | 16.7 | 0.080 | 0.797 | 9.9× |
+| 8 | 26.2 | 118.3 | 13.4 | 12.8 | 0.089 | 0.717 | 8.0× |
+| 16 | 24.3 | 71.7 | 13.7 | 10.6 | 0.104 | 0.852 | 8.2× |
+| 32 | 22.5 | 42.3 | 13.3 | 9.1 | 0.119 | 0.921 | **7.8×** |
+
+**Phase 1 is flat, phase 2 is not.** Across three independent sweeps the phase-1 slope per doubling
+of threads was −2.9%, +0.3% and +1.3% — mixed signs, so no trend, which is what must happen since
+phase 1 runs inside `ZScoreInitGlobal` before any scan thread exists. Phase 2 moved −33.4%, −29.4%
+and −33.4% per doubling: reproducible, therefore real.
+
+The cause is **host feed depth, not core confinement** — measured, not inferred. A `--no-taskset`
+sweep with all 32 cores available and only `PRAGMA threads` varying still moved phase 2 from 40.7 to
+9.0 ms. One scan thread cannot keep three decode lanes fed. Pinning is a real but secondary effect:
+at threads=1 it costs 63.3 vs 53.0 ms (16%).
+
+**So do not claim "flat in host core count".** The defensible statements are:
+
+> The FPGA path passes the 32-core CPU baseline at **2 host threads** (38.9 vs 42.3 ms), and reaches
+> 1.61× of it at 8. At 32 threads it uses **7.8× fewer CPU-seconds**, rising to 18.5× at one thread.
+
+The crossing sits at 2 threads in all three sweeps (balanced 1.09×, knee 1.25×, unpinned 1.11×), so
+it is a property of the design and not of one dataset.
+
+⚠️ **The roadmap's actionable recommendation is reversed for us.** It found the FPGA arm's
+CPU-seconds doubling from 1→32 threads for a 1.8% wall gain, and concluded the operator should cap
+the thread count it requests. Ours doubles too (0.062 → 0.119) but buys a **2.8× wall speedup**
+(63.3 → 22.5 ms). Our operator genuinely needs those threads, and the reason is the phase-2 feed
+finding above. Deeper per-worker windowing is the lever that would change this.
+
+### Test 5 — the control holds: no shape effect
+
+| skewness | 0.00 | 0.66 | 1.24 | 1.72 | 2.13 | 2.79 |
+|---|--:|--:|--:|--:|--:|--:|
+| FPGA op (ms), run 1 | 22.2 | 22.0 | 22.3 | 22.1 | 21.7 | 22.9 |
+| FPGA op (ms), run 2 | 21.3 | 21.6 | 21.7 | 21.7 | 21.3 | 22.0 |
+
+Across-skew spread was 5.3% and 3.1%; the largest **same-point repeat difference was 0.9 ms
+(4.1%)** — as large as the spread itself, and the ordering reshuffles between sessions. There is no
+trend. Speedup stays in 1.90–2.17×.
+
+> Over Fisher skewness 0.00–2.79 and excess kurtosis −1.20–7.53, with rows, cardinality, encoding,
+> byte volume and row-group geometry held fixed, FPGA operator time varies by 4.3% pooled over two
+> sessions, and the speedup stays in 1.90–2.17×.
+
+Construction check: a=0 measures skewness **−0.0000** and excess kurtosis **−1.2000**, the exact
+theoretical values for a uniform distribution.
+
+Unplanned bonus control: at a=8 and a=12 the flag count is 8× and 16× larger (165,854 and 332,687
+vs 20,000) while operator time does not move — measured proof that flag density does not affect the
+`FILTER` path.
+
+## Why two internal checks differ from the roadmap's
+
+Both were changed **after** confirming the roadmap's premise is false for this architecture, not
+because they failed. The evidence in each case is independent of the numbers they gate:
+
+1. **Test 4 — "phase 2 must be constant within a level" is dropped.** Its second pass streams
+   already-decoded data; ours re-reads and re-decodes the column, because the global scheme's
+   barrier makes each phase a full pass. So representation moves both phases, and it does — phase 1
+   and phase 2 track each other at a roughly constant ratio across all eight points. The control
+   that still holds is the generator's digest gate: the four files at a level provably carry the
+   same numbers. Replaced by the bytes/row fit above, whose rms **is** the check.
+2. **Test 3 — the flatness check moved from phase 2 to phase 1.** Phase 2 is host-fed here, so it
+   legitimately scales; phase 1 runs before any scan thread exists and therefore must not move. The
+   `--no-taskset` sweep is what established this rather than assuming it.
+
 ## Sanity checklist before sending results
 
 - [ ] Every point reported the exact expected flag count on **all 7** iterations (`flags_ok=1`).
