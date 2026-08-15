@@ -71,8 +71,14 @@ git push backup $(git branch --show-current)
 
 ---
 
-**Recovery verification status:** ⛔ **NOT YET VERIFIED.** The fresh-clone restore test
-(`GITHUB_BACKUP_GUIDE.md` §6) has **not** been run — it was deferred because a benchmark dataset
-generation was using the NFS home at capture time. Until someone clones this into a scratch
-directory, restores submodules, and confirms the file list matches, this backup is a hypothesis.
-**Do that test, then replace this paragraph with the date it passed.**
+**Recovery verification status:** ✅ **VERIFIED 2026-08-15** on `alveo-u55c-09`. A fresh clone into
+`/tmp/restore-test` (`GITHUB_BACKUP_GUIDE.md` §6) reproduced everything:
+
+| check | result |
+|---|---|
+| `git submodule update --init --recursive` | full 4-deep chain checked out |
+| `git lfs pull` → build-41 bitstream | **60 MB, md5 `a65124a5af1cb789207e704236796576`** — identical to the original (a bare LFS pointer would have been ~130 bytes) |
+| `diff` of `git ls-files` vs the working repo | empty — same file list |
+| `git apply --check patches/coyote-place-directive.patch` | applies cleanly |
+
+Re-run this test after any change to LFS tracking or the submodule pins.
